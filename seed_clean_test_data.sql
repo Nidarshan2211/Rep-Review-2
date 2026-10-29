@@ -4,8 +4,6 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- Clear previous test data (retain admin)
 DELETE FROM away_periods;
 DELETE FROM household_size_history;
-DELETE FROM leak_feedback;
-DELETE FROM leak_incidents;
 DELETE FROM payments;
 DELETE FROM bills;
 DELETE FROM invoices;

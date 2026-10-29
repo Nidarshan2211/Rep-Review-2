@@ -43,9 +43,8 @@ public class BulkBillingService {
     private final BillingCycleService billingCycleService;
     private final AlertEngineService alertEngineService;
     private final ApartmentRepository apartmentRepository;
-    private final com.smartwater.billing.common.ml.LeakDetectionService leakDetectionService;
 
-    public BulkBillingService(BuildingRepository buildingRepository, BillingCycleRepository billingCycleRepository, ResidentRepository residentRepository, WaterMeterRepository waterMeterRepository, WaterUsageRepository usageRepository, BillRepository billRepository, NotificationRepository notificationRepository, BuildingOwnerService ownerService, TariffCalculationService tariffCalculationService, BillingCycleService billingCycleService, AlertEngineService alertEngineService, ApartmentRepository apartmentRepository, com.smartwater.billing.common.ml.LeakDetectionService leakDetectionService) {
+    public BulkBillingService(BuildingRepository buildingRepository, BillingCycleRepository billingCycleRepository, ResidentRepository residentRepository, WaterMeterRepository waterMeterRepository, WaterUsageRepository usageRepository, BillRepository billRepository, NotificationRepository notificationRepository, BuildingOwnerService ownerService, TariffCalculationService tariffCalculationService, BillingCycleService billingCycleService, AlertEngineService alertEngineService, ApartmentRepository apartmentRepository) {
         this.buildingRepository = buildingRepository;
         this.billingCycleRepository = billingCycleRepository;
         this.residentRepository = residentRepository;
@@ -58,7 +57,6 @@ public class BulkBillingService {
         this.billingCycleService = billingCycleService;
         this.alertEngineService = alertEngineService;
         this.apartmentRepository = apartmentRepository;
-        this.leakDetectionService = leakDetectionService;
     }
 
 
@@ -697,13 +695,7 @@ public class BulkBillingService {
         // 3. Persist water usage records atomically
         usageRepository.saveAll(usageRecordsToSave);
 
-        // 4. Trigger asynchronous ML leak detection scoring post-commit
-        try {
-            leakDetectionService.scoreBillingCycleAsync(buildingId, cycleId);
-        } catch (Exception ex) {
-            log.warn("Could not trigger async leak detection scoring for cycle #{}: {}", cycleId, ex.getMessage());
-        }
-
+        
         log.info("Successfully imported {} water meter readings for building '{}', cycle #{}. Cycle remains OPEN.",
                 usageRecordsToSave.size(), building.getBuildingName(), cycleId);
 
@@ -988,13 +980,7 @@ public class BulkBillingService {
         // 7. Persist WaterUsage records within the transaction
         usageRepository.saveAll(usageRecordsToSave);
 
-        // Trigger asynchronous ML leak detection scoring post-commit
-        try {
-            leakDetectionService.scoreBillingCycleAsync(buildingId, cycleId);
-        } catch (Exception ex) {
-            log.warn("Could not trigger async leak detection scoring for cycle #{}: {}", cycleId, ex.getMessage());
-        }
-
+        
         // 8. Invoke BillingCycleService.finalizeCycle (joins existing @Transactional)
         BillingCycle finalizedCycle = billingCycleService.finalizeCycle(cycleId);
 

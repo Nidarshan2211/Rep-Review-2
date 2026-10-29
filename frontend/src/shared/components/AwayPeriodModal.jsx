@@ -4,8 +4,8 @@ import API from '../services/api';
 /**
  * AwayPeriodModal
  * Allows residents to log vacation / away periods (max 180 days) so that ML
- * leak detection does not flag zero/low usage as meter faults, and can detect
- * continuous leaks even when nobody is home.
+ * usage analytics do not flag zero/low usage as meter faults, and can account for
+ * reduced occupancy while away.
  */
 export default function AwayPeriodModal({ show, onClose, onUpdated }) {
   const [awayPeriods, setAwayPeriods] = useState([]);

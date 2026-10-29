@@ -54,7 +54,7 @@ export default function OwnerDashboard() {
 
       {/* Quick Operations Panel */}
       <div className="row g-4 mb-4">
-        <div className="col-lg-3 col-md-6">
+        <div className="col-lg-4 col-md-6">
           <div className="card glass-card h-100 border p-4 shadow-sm">
             <div className="d-flex align-items-center gap-3 mb-3">
               <div className="rounded-3 bg-light border p-3 text-dark fs-4">
@@ -71,7 +71,7 @@ export default function OwnerDashboard() {
           </div>
         </div>
 
-        <div className="col-lg-3 col-md-6">
+        <div className="col-lg-4 col-md-6">
           <div className="card glass-card h-100 border p-4 shadow-sm">
             <div className="d-flex align-items-center gap-3 mb-3">
               <div className="rounded-3 bg-light border p-3 text-dark fs-4">
@@ -88,7 +88,7 @@ export default function OwnerDashboard() {
           </div>
         </div>
 
-        <div className="col-lg-3 col-md-6">
+        <div className="col-lg-4 col-md-6">
           <div className="card glass-card h-100 border p-4 shadow-sm">
             <div className="d-flex align-items-center gap-3 mb-3">
               <div className="rounded-3 bg-primary bg-opacity-10 border border-primary border-opacity-25 p-3 text-primary fs-4">
@@ -101,23 +101,6 @@ export default function OwnerDashboard() {
             </div>
             <Link to="/owner/invoices" className="btn btn-primary w-100 fw-bold mt-auto py-2">
               Invoices <i className="bi bi-arrow-right ms-1"></i>
-            </Link>
-          </div>
-        </div>
-
-        <div className="col-lg-3 col-md-6">
-          <div className="card glass-card h-100 border p-4 shadow-sm border-danger-subtle bg-danger-subtle bg-opacity-10">
-            <div className="d-flex align-items-center gap-3 mb-3">
-              <div className="rounded-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 p-3 text-danger fs-4">
-                <i className="bi bi-shield-exclamation"></i>
-              </div>
-              <div>
-                <h5 className="fw-bold mb-1 text-danger">Leak Monitoring</h5>
-                <small className="text-muted">AI per-flat anomaly detection & loss prevention</small>
-              </div>
-            </div>
-            <Link to="/owner/leak-monitoring" className="btn btn-danger w-100 fw-bold mt-auto py-2">
-              Diagnostics <i className="bi bi-arrow-right ms-1"></i>
             </Link>
           </div>
         </div>

@@ -359,7 +359,7 @@ export default function RegisterResidentPage() {
                       <label className="form-label fs-8 fw-semibold text-dark mb-0">Household Details for Water Diagnostics</label>
                     </div>
                     <p className="text-muted fs-8 mb-2">
-                      Helps us detect water leaks accurately. Only numbers are stored, never names or personal data.
+                      Helps calibrate baseline consumption accurately. Only numbers are stored, never names or personal data.
                     </p>
                     <div className="row g-2">
                       <div className="col-6">

@@ -13,7 +13,7 @@ import com.smartwater.billing.common.exception.ResourceNotFoundException;
 import com.smartwater.billing.common.repository.*;
 import com.smartwater.billing.owner.repository.*;
 import com.smartwater.billing.resident.repository.*;
-import com.smartwater.billing.common.ml.HouseholdProperties;
+import com.smartwater.billing.common.config.HouseholdProperties;
 import com.smartwater.billing.resident.service.OccupancyService;
 import com.smartwater.billing.common.util.TokenGenerator;
 import org.springframework.context.annotation.Lazy;

@@ -14,14 +14,12 @@ import API from '../../shared/services/api';
 import StatCard from '../../shared/components/StatCard';
 import WaterSavingTips from '../../shared/components/WaterSavingTips';
 import LoadingSpinner from '../../shared/components/LoadingSpinner';
-import { formatFeedbackLabel } from '../../shared/components/LeakStatusBadge';
 
 export default function ResidentDashboard() {
   const [stats, setStats] = useState(null);
   const [currentOccupancy, setCurrentOccupancy] = useState(null);
   const [pendingRequest, setPendingRequest] = useState(null);
   const [usageList, setUsageList] = useState([]);
-  const [leakData, setLeakData] = useState(null);
   const [loading, setLoading] = useState(true);
 
   // Guided Apartment Selection Flow State
@@ -54,18 +52,16 @@ export default function ResidentDashboard() {
 
   const loadDashboardData = async () => {
     try {
-      const [statRes, usageRes, occRes, pendingRes, leakRes] = await Promise.all([
+      const [statRes, usageRes, occRes, pendingRes] = await Promise.all([
         API.get('/resident/dashboard').catch(() => ({ data: null })),
         API.get('/resident/usage').catch(() => ({ data: [] })),
         API.get('/resident/occupancy/current').catch(() => ({ data: null })),
-        API.get('/resident/occupancy-request/pending').catch(() => ({ data: null })),
-        API.get('/resident/leak-status').catch(() => ({ data: null }))
+        API.get('/resident/occupancy-request/pending').catch(() => ({ data: null }))
       ]);
 
       setStats(statRes.data);
       setCurrentOccupancy(occRes.data);
       setPendingRequest(pendingRes.data);
-      setLeakData(leakRes.data);
 
       const rawUsage = usageRes.data || [];
       const sorted = [...rawUsage].sort((a, b) => (a.year - b.year) || (a.month - b.month));
@@ -315,97 +311,16 @@ export default function ResidentDashboard() {
             </div>
           </div>
 
-          {/* AI Leak Alert Banner - Only if unacknowledged */}
-          {leakData?.anomalyStatus === 'POTENTIAL_LEAK' && !leakData?.hasFeedback && (
-            <div className="alert alert-danger border-start border-danger border-4 rounded-4 p-3 mb-4 shadow-sm d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <div className="d-flex align-items-center gap-3">
-                <i className="bi bi-exclamation-triangle-fill fs-3 text-danger"></i>
-                <div>
-                  <h6 className="fw-bold text-danger mb-0">Potential Water Leak Detected</h6>
-                  <p className="fs-7 text-dark mb-0">
-                    {leakData.anomalyReason || 'Consumption significantly exceeds predicted household bounds.'}
-                  </p>
-                </div>
-              </div>
-              <Link to="/resident/leak-status" className="btn btn-danger btn-sm rounded-pill px-3 fw-bold shadow-xs">
-                View Diagnostics & Actions
-              </Link>
-            </div>
-          )}
-
-          {/* Feedback Acknowledged Banner */}
-          {leakData?.hasFeedback && (
-            <div className="alert alert-success border border-success-subtle rounded-4 p-3 mb-4 shadow-xs d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <div className="d-flex align-items-center gap-3">
-                <i className="bi bi-check-circle-fill fs-4 text-success"></i>
-                <div>
-                  <h6 className="fw-bold text-success mb-0">Leak Feedback Logged</h6>
-                  <p className="fs-7 text-dark mb-0">
-                    You reported <strong>{formatFeedbackLabel(leakData.latestFeedback)}</strong> for this billing cycle. Alert has been acknowledged and recorded.
-                  </p>
-                </div>
-              </div>
-              <Link to="/resident/leak-status" className="btn btn-outline-success btn-sm rounded-pill px-3 fw-semibold">
-                View Diagnostics
-              </Link>
-            </div>
-          )}
-
-          {/* Household Size Unconfirmed Banner */}
-          {leakData && !leakData.householdSizeConfirmed && (
-            <div className="alert alert-warning border border-warning-subtle rounded-4 p-3 mb-4 shadow-xs d-flex justify-content-between align-items-center flex-wrap gap-2">
-              <div className="d-flex align-items-center gap-2">
-                <i className="bi bi-people-fill text-warning fs-5"></i>
-                <span className="fs-7 text-dark">
-                  Household size is currently estimated at <strong>{leakData.householdSize || 2} members</strong>. Please verify your details for accurate leak alerts.
-                </span>
-              </div>
-              <Link to="/resident/leak-status" className="btn btn-warning btn-sm fw-bold px-3">
-                Confirm Details
-              </Link>
-            </div>
-          )}
-
           {/* Telemetry Stat Cards */}
           <div className="row g-3 mb-4">
-            <div className="col-md-6 col-lg-3">
+            <div className="col-md-4">
               <StatCard title="Current Consumption" value={`${stats?.currentMonthUsage || 0} kL`} icon="bi-droplet-half" subtext={`Cycle: ${stats?.currentBillingCycle || 'Active'}`} />
             </div>
-            <div className="col-md-6 col-lg-3">
+            <div className="col-md-4">
               <StatCard title="Current Bill Amount" value={`₹${(stats?.activeBillAmount || 0).toFixed(2)}`} icon="bi-cash" subtext={`Due: ${stats?.activeBillDueDate || 'N/A'}`} />
             </div>
-            <div className="col-md-6 col-lg-3">
+            <div className="col-md-4">
               <StatCard title="Payment Status" value={stats?.activeBillStatus || 'N/A'} icon="bi-check-circle" />
-            </div>
-            <div className="col-md-6 col-lg-3">
-              <Link to="/resident/leak-status" className="text-decoration-none">
-                <StatCard
-                  title="Leak Risk Status"
-                  value={
-                    leakData?.hasFeedback
-                      ? 'Feedback Logged'
-                      : leakData?.anomalyStatus === 'POTENTIAL_LEAK'
-                      ? 'Potential Leak'
-                      : leakData?.anomalyStatus === 'NORMAL'
-                      ? 'Normal'
-                      : 'Baseline'
-                  }
-                  icon={
-                    leakData?.hasFeedback
-                      ? 'bi-check-circle'
-                      : leakData?.anomalyStatus === 'POTENTIAL_LEAK'
-                      ? 'bi-shield-exclamation'
-                      : 'bi-shield-check'
-                  }
-                  subtext={
-                    leakData?.hasFeedback
-                      ? `${formatFeedbackLabel(leakData.latestFeedback)} • Acknowledged`
-                      : leakData?.anomalyScore != null
-                      ? `Risk: ${(leakData.anomalyScore > 0 && leakData.anomalyScore <= 1.0) ? Math.round(leakData.anomalyScore * 100) : Math.round(leakData.anomalyScore)}% • Diagnostics`
-                      : 'Diagnostics Active'
-                  }
-                />
-              </Link>
             </div>
           </div>
 

@@ -46,17 +46,6 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
-# ML Leak Detection Configuration
-ml:
-  enabled: ${ML_ENABLED:true}
-  base-url: ${ML_BASE_URL:http://localhost:8000}
-  api-key: ${ML_API_KEY:test-ml-secret-key-aqua-flow-2026}
-  timeout-ms: ${ML_TIMEOUT_MS:5000}
-  batch-size: ${ML_BATCH_SIZE:500}
-  thresholds:
-    low: ${ML_THRESHOLD_LOW:0.50}
-    high: ${ML_THRESHOLD_HIGH:0.75}
-
 # Household Size & Occupancy Configuration
 household:
   defaults:

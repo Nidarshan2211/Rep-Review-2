@@ -393,7 +393,7 @@
           }
         },
         {
-          "name": "Get Resident Notifications & Leak Alerts",
+          "name": "Get Resident Notifications",
           "request": {
             "method": "GET",
             "header": [

@@ -121,7 +121,7 @@ export default function HouseholdSizeModal({
                   <div>
                     <h6 className="fw-bold text-dark mb-1">Large Household Confirmation</h6>
                     <p className="fs-7 text-muted mb-0">
-                      You entered <strong>{householdSize} members</strong>. Leak detection baseline consumption will be calibrated significantly higher for this unit.
+                      You entered <strong>{householdSize} members</strong>. Baseline consumption will be calibrated significantly higher for this unit.
                     </p>
                   </div>
                 </div>

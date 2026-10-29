@@ -35,7 +35,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
-import com.smartwater.billing.common.ml.HouseholdProperties;
+import com.smartwater.billing.common.config.HouseholdProperties;
 import com.smartwater.billing.resident.entity.HouseholdSizeHistory;
 import com.smartwater.billing.resident.repository.HouseholdSizeHistoryRepository;
 import jakarta.persistence.EntityManager;

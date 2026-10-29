@@ -58,9 +58,6 @@ export default function Sidebar() {
             <NavLink to="/owner/invoices" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <i className="bi bi-receipt-cutoff"></i> Invoices
             </NavLink>
-            <NavLink to="/owner/leak-monitoring" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              <i className="bi bi-shield-exclamation"></i> Leak Monitoring
-            </NavLink>
             <NavLink to="/owner/history" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <i className="bi bi-clock-history"></i> Resident History
             </NavLink>
@@ -71,9 +68,6 @@ export default function Sidebar() {
           <>
             <NavLink to="/resident/dashboard" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <i className="bi bi-speedometer2"></i> Resident Dashboard
-            </NavLink>
-            <NavLink to="/resident/leak-status" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
-              <i className="bi bi-droplet-half"></i> Leak Status & Household
             </NavLink>
             <NavLink to="/resident/bills" className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}>
               <i className="bi bi-card-checklist"></i> My Bills & Payments

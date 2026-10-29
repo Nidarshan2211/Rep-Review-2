@@ -69,7 +69,7 @@ export default function AcceptInvitation() {
     }
 
     if (size > 6 && !sanityWarningDismissed) {
-      if (!window.confirm(`You specified ${size} household members. Water leak benchmarks will be calibrated for a large household. Are you sure this is accurate?`)) {
+      if (!window.confirm(`You specified ${size} household members. Water consumption benchmarks will be calibrated for a large household. Are you sure this is accurate?`)) {
         return;
       }
       setSanityWarningDismissed(true);
@@ -184,7 +184,7 @@ export default function AcceptInvitation() {
                   <h6 className="fw-bold text-dark mb-0 fs-7">Household Details (Required)</h6>
                 </div>
                 <p className="fs-8 text-muted mb-3">
-                  Helps us detect water leaks accurately. Only numbers are stored, never names or personal data.
+                  Helps calibrate baseline consumption accurately. Only numbers are stored, never names or personal data.
                 </p>
 
                 <div className="row g-2 mb-2">

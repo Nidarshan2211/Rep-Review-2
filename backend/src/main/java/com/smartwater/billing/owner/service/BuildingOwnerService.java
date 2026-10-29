@@ -162,16 +162,7 @@ public void deleteBuilding(String email, Long buildingId) {
                     "DELETE FROM household_size_history WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
             ).setParameter("bldgId", buildingId).executeUpdate();
 
-            // 2. Leak feedback and incidents
-            entityManager.createNativeQuery(
-                    "DELETE FROM leak_feedback WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
-            ).setParameter("bldgId", buildingId).executeUpdate();
-
-            entityManager.createNativeQuery(
-                    "DELETE FROM leak_incidents WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
-            ).setParameter("bldgId", buildingId).executeUpdate();
-
-            // 3. Occupancy requests & resident invitations
+                                    // 3. Occupancy requests & resident invitations
             entityManager.createNativeQuery(
                     "DELETE FROM occupancy_requests WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
             ).setParameter("bldgId", buildingId).executeUpdate();
