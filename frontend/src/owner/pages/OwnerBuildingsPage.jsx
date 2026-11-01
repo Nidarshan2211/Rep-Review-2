@@ -369,8 +369,11 @@ export default function OwnerBuildingsPage() {
                     <input type="text" className="form-control" placeholder="BLDG-02" value={formData.buildingNumber} onChange={e => setFormData({...formData, buildingNumber: e.target.value})} required />
                   </div>
                   <div className="mb-3">
-                    <label className="form-label fw-semibold fs-7 text-dark">Total Flats *</label>
+                    <label className="form-label fw-semibold fs-7 text-dark">Total Planned Flats *</label>
                     <input type="number" className="form-control" value={formData.totalFlats} onChange={e => setFormData({...formData, totalFlats: parseInt(e.target.value)})} required min={1} />
+                    <small className="text-muted d-block mt-1 fs-8">
+                      Units are automatically created with 5 rooms per floor (e.g., 101–105 on Floor 1, 201–205 on Floor 2, 301–305 on Floor 3, etc.).
+                    </small>
                   </div>
                   <div className="mb-3">
                     <label className="form-label fw-semibold fs-7 text-dark">Location Address *</label>
@@ -560,7 +563,7 @@ export default function OwnerBuildingsPage() {
                               <input
                                 type="text"
                                 className="form-control form-control-sm"
-                                placeholder="e.g. 101, 102, 103, 104"
+                                placeholder="e.g. 101, 102, 103, 104, 105 (5 rooms per floor)"
                                 value={unitFormData.roomNumbers}
                                 onChange={e => setUnitFormData({...unitFormData, roomNumbers: e.target.value})}
                                 required

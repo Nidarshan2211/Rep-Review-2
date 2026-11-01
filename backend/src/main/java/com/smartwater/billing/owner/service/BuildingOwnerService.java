@@ -23,6 +23,7 @@ import com.smartwater.billing.resident.repository.*;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -132,6 +133,40 @@ public class BuildingOwnerService {
                 .location(request.getLocation())
                 .build();
         buildingRepository.save(building);
+
+        // Auto-create planned apartments: 5 rooms per floor starting from 101, then 201, etc.
+        int total = request.getTotalFlats() != null ? request.getTotalFlats() : 0;
+        int flatsPerFloor = 5;
+        for (int floor = 1; (floor - 1) * flatsPerFloor < total; floor++) {
+            for (int roomIdx = 1; roomIdx <= flatsPerFloor; roomIdx++) {
+                int currentUnitCount = (floor - 1) * flatsPerFloor + roomIdx;
+                if (currentUnitCount > total) {
+                    break;
+                }
+                String room = (floor * 100 + roomIdx) + "";
+                Apartment apt = Apartment.builder()
+                        .building(building)
+                        .floorNumber(floor)
+                        .apartmentName("Flat " + room)
+                        .roomNumber(room)
+                        .unitType("2BHK")
+                        .build();
+                apt = apartmentRepository.save(apt);
+
+                String mNum = "WM-" + building.getBuildingNumber() + "-" + room;
+                if (meterRepository.findByMeterNumber(mNum).isEmpty()) {
+                    WaterMeter meter = WaterMeter.builder()
+                            .building(building)
+                            .apartment(apt)
+                            .meterNumber(mNum)
+                            .installationDate(LocalDate.now())
+                            .status(WaterMeter.MeterStatus.ACTIVE)
+                            .build();
+                    meterRepository.save(meter);
+                }
+            }
+        }
+
         return convertToBuildingResponse(building);
     }
 

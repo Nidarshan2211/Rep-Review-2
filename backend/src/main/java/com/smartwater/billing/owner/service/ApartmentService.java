@@ -155,7 +155,7 @@ public class ApartmentService {
 
         // If totalFlats specified and few created, generate default vacant flats
         int total = building.getTotalFlats() != null ? building.getTotalFlats() : 6;
-        int flatsPerFloor = 4;
+        int flatsPerFloor = 5;
         for (int i = 1; createdRooms.size() < total && i <= 10; i++) {
             for (int f = 1; f <= flatsPerFloor && createdRooms.size() < total; f++) {
                 String room = (i * 100 + f) + "";
@@ -193,7 +193,7 @@ public class ApartmentService {
         Set<String> createdRooms = existing.stream().map(Apartment::getRoomNumber).collect(Collectors.toSet());
 
         int total = building.getTotalFlats() != null ? building.getTotalFlats() : 24;
-        int flatsPerFloor = 4;
+        int flatsPerFloor = 5;
         for (int i = 1; createdRooms.size() < total && i <= 20; i++) {
             for (int f = 1; f <= flatsPerFloor && createdRooms.size() < total; f++) {
                 String room = (i * 100 + f) + "";
