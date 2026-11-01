@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ResponsiveContainer,
@@ -15,6 +15,7 @@ import StatCard from '../../shared/components/StatCard';
 import WaterSavingTips from '../../shared/components/WaterSavingTips';
 import LoadingSpinner from '../../shared/components/LoadingSpinner';
 import { formatFeedbackLabel } from '../../shared/components/LeakStatusBadge';
+import WaterPredictionCard from '../components/WaterPredictionCard';
 
 export default function ResidentDashboard() {
   const [stats, setStats] = useState(null);
@@ -507,6 +508,8 @@ export default function ResidentDashboard() {
               </div>
             </div>
           </div>
+
+          <WaterPredictionCard />
 
           <div className="mb-4">
             <WaterSavingTips />

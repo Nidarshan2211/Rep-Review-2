@@ -1,0 +1,40 @@
+{
+  "model_name": "Random Forest Regressor",
+  "algorithm": "RandomForestRegressor",
+  "model_version": "1.0.0",
+  "trained_at": "2026-10-31T23:43:49.713725",
+  "dataset_type": "Synthetic Water Consumption (ml-service/dataset/synthetic_water_usage.csv)",
+  "random_state": 42,
+  "n_estimators": 100,
+  "max_depth": 10,
+  "features": [
+    "previous_month_consumption",
+    "two_months_ago_consumption",
+    "three_months_ago_consumption",
+    "three_month_average",
+    "residents_count",
+    "month_of_year",
+    "previous_consumption_trend"
+  ],
+  "target": "next_month_consumption",
+  "split_strategy": "Chronological (Train: months 4-18, Test: months 19-24)",
+  "train_samples": 1500,
+  "test_samples": 600,
+  "metrics": {
+    "test_mae_litres": 1749.94,
+    "test_rmse_litres": 3075.85,
+    "test_r2_score": 0.8433,
+    "train_mae_litres": 917.0,
+    "train_rmse_litres": 1592.66,
+    "train_r2_score": 0.9659
+  },
+  "feature_importances": {
+    "previous_month_consumption": 0.7691,
+    "two_months_ago_consumption": 0.0488,
+    "three_months_ago_consumption": 0.021,
+    "three_month_average": 0.0434,
+    "residents_count": 0.0607,
+    "month_of_year": 0.0375,
+    "previous_consumption_trend": 0.0197
+  }
+}

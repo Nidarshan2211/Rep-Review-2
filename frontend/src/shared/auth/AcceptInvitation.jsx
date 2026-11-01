@@ -28,7 +28,7 @@ export default function AcceptInvitation() {
       return;
     }
 
-    API.get(`/api/residents/invitations/validate?token=${encodeURIComponent(token)}`)
+    API.get(`/auth/validate-invitation?token=${encodeURIComponent(token)}`)
       .then(res => {
         const data = res.data;
         setInviteData(data);
@@ -77,7 +77,7 @@ export default function AcceptInvitation() {
 
     setSubmitting(true);
     try {
-      await API.post('/api/residents/invitations/accept', {
+      await API.post('/auth/accept-invitation', {
         token: token,
         password: password,
         householdSize: size,
