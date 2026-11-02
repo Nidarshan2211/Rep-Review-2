@@ -26,6 +26,10 @@ public class PredictionDTOs {
         private TierBreakdown tierBreakdown;
         private List<MonthlyHistoryPoint> historicalData;
         private LocalDateTime predictedAt;
+        private Boolean isNewResident;
+        private Integer historicalCyclesCount;
+        private Integer householdSize;
+        private String predictionType;
 
         public PredictionResponse() {}
 
@@ -88,6 +92,18 @@ public class PredictionDTOs {
 
         public LocalDateTime getPredictedAt() { return predictedAt; }
         public void setPredictedAt(LocalDateTime predictedAt) { this.predictedAt = predictedAt; }
+
+        public Boolean getIsNewResident() { return isNewResident; }
+        public void setIsNewResident(Boolean isNewResident) { this.isNewResident = isNewResident; }
+
+        public Integer getHistoricalCyclesCount() { return historicalCyclesCount; }
+        public void setHistoricalCyclesCount(Integer historicalCyclesCount) { this.historicalCyclesCount = historicalCyclesCount; }
+
+        public Integer getHouseholdSize() { return householdSize; }
+        public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+        public String getPredictionType() { return predictionType; }
+        public void setPredictionType(String predictionType) { this.predictionType = predictionType; }
     }
 
     public static class MonthlyHistoryPoint {

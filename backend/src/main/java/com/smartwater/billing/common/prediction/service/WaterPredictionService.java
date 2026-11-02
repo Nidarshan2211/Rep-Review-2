@@ -170,18 +170,36 @@ public class WaterPredictionService {
                                             tierBreakdown.getFixedCharge());
 
         // 8. Trend & Recommendation Formulation
-        double prevKl = round(lag1Litres / 1000.0);
-        double deltaKl = round(predictedKl - prevKl);
-        double deltaPct = prevKl > 0 ? round((deltaKl / prevKl) * 100.0) : 0.0;
-        String trendDirection = deltaKl > 0.5 ? "INCREASE" : (deltaKl < -0.5 ? "DECREASE" : "STABLE");
+        boolean isNewResident = history.isEmpty();
+        int historicalCyclesCount = history.size();
 
+        Double prevKl = null;
+        Double prevLitres = null;
+        Double deltaKl = null;
+        Double deltaPct = null;
+        String trendDirection;
         String recommendation;
-        if (deltaPct > 12.0) {
-            recommendation = String.format("Predicted consumption is projected to rise by %.1f%% (+%.2f kL). Consider checking for concealed toilet flapper leaks, optimizing laundry loads, and installing low-flow aerators.", deltaPct, deltaKl);
-        } else if (deltaPct < -8.0) {
-            recommendation = String.format("Excellent conservation trend! Your predicted consumption is %.1f%% lower than last month. Continue your current water-saving habits.", Math.abs(deltaPct));
+
+        if (isNewResident) {
+            trendDirection = "INITIAL_BASELINE";
+            recommendation = String.format(
+                "Welcome to AquaFlow! Because you are a new resident with no prior billing cycles, this initial forecast is an AI baseline projection based on your declared household size of %d members (~150 L/person/day). Personalized consumption trends will calibrate after your first monthly meter reading.",
+                householdSize
+            );
         } else {
-            recommendation = "Your predicted consumption is consistent with your household's baseline usage. Maintain regular fixture inspections to prevent hidden leaks.";
+            prevKl = round(lag1Litres / 1000.0);
+            prevLitres = round(lag1Litres);
+            deltaKl = round(predictedKl - prevKl);
+            deltaPct = prevKl > 0 ? round((deltaKl / prevKl) * 100.0) : 0.0;
+            trendDirection = deltaKl > 0.5 ? "INCREASE" : (deltaKl < -0.5 ? "DECREASE" : "STABLE");
+
+            if (deltaPct > 12.0) {
+                recommendation = String.format("Predicted consumption is projected to rise by %.1f%% (+%.2f kL). Consider checking for concealed toilet flapper leaks, optimizing laundry loads, and installing low-flow aerators.", deltaPct, deltaKl);
+            } else if (deltaPct < -8.0) {
+                recommendation = String.format("Excellent conservation trend! Your predicted consumption is %.1f%% lower than last month. Continue your current water-saving habits.", Math.abs(deltaPct));
+            } else {
+                recommendation = "Your predicted consumption is consistent with your household's baseline usage. Maintain regular fixture inspections to prevent hidden leaks.";
+            }
         }
 
         // 9. Persist Prediction Result
@@ -198,7 +216,7 @@ public class WaterPredictionService {
         predictionEntity.setEstimatedAmount(totalEstimatedAmount);
         predictionEntity.setModelName(mlRes.getModel_name());
         predictionEntity.setModelVersion(mlRes.getModel_version());
-        predictionEntity.setPredictionStatus(mlRes.getPrediction_status());
+        predictionEntity.setPredictionStatus(isNewResident ? "BASELINE_PROJECTION" : mlRes.getPrediction_status());
         predictionEntity.setRecommendation(recommendation);
         predictionEntity.setCreatedAt(LocalDateTime.now());
         predictionRepository.save(predictionEntity);
@@ -214,8 +232,12 @@ public class WaterPredictionService {
         response.setPredictedConsumptionLitres(predictedLitres);
         response.setPredictedConsumptionKl(predictedKl);
         response.setEstimatedAmount(totalEstimatedAmount);
+        response.setIsNewResident(isNewResident);
+        response.setHistoricalCyclesCount(historicalCyclesCount);
+        response.setHouseholdSize(householdSize);
+        response.setPredictionType(isNewResident ? "BASELINE_PROJECTION" : "HISTORICAL_FORECAST");
         response.setPreviousMonthConsumptionKl(prevKl);
-        response.setPreviousMonthConsumptionLitres(round(lag1Litres));
+        response.setPreviousMonthConsumptionLitres(prevLitres);
         response.setConsumptionDeltaKl(deltaKl);
         response.setConsumptionDeltaPercentage(deltaPct);
         response.setTrendDirection(trendDirection);

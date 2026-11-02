@@ -69,6 +69,11 @@ export default function WaterPredictionCard() {
               <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 fs-8 fw-semibold rounded-pill">
                 Random Forest ML
               </span>
+              {prediction?.isNewResident && (
+                <span className="badge bg-info-subtle text-info border border-info-subtle px-2 py-1 fs-8 fw-semibold rounded-pill d-flex align-items-center gap-1">
+                  <i className="bi bi-house-door"></i> Initial Baseline
+                </span>
+              )}
             </div>
             <p className="text-muted fs-7 mb-0">
               Predictive consumption telemetry & estimated tariff billing
@@ -145,6 +150,7 @@ export default function WaterPredictionCard() {
                 </h3>
                 <small className="text-muted fs-8 d-block mt-1">
                   ≈ {Math.round(prediction.predictedConsumptionLitres).toLocaleString()} Litres
+                  {prediction.isNewResident && ` • ${prediction.householdSize || 2} Occupants`}
                 </small>
               </div>
             </div>
@@ -162,7 +168,7 @@ export default function WaterPredictionCard() {
                   {formatCurrency(prediction.estimatedAmount)}
                 </h3>
                 <small className="text-muted fs-8 d-block mt-1">
-                  Tiers + Fixed Charges
+                  {prediction.isNewResident ? 'Baseline 3-Tier Tariff' : 'Tiers + Fixed Charges'}
                 </small>
               </div>
             </div>
@@ -174,15 +180,28 @@ export default function WaterPredictionCard() {
                   <small className="text-muted fw-semibold text-uppercase fs-8">
                     Last Month Actual
                   </small>
-                  <i className="bi bi-clock-history text-secondary fs-5"></i>
+                  <i className={`bi ${prediction.isNewResident || prediction.previousMonthConsumptionKl == null ? 'bi-calendar-check text-muted' : 'bi-clock-history text-secondary'} fs-5`}></i>
                 </div>
-                <h3 className="fw-extrabold text-dark mb-0">
-                  {prediction.previousMonthConsumptionKl?.toFixed(2) || '0.00'}{' '}
-                  <span className="fs-6 fw-semibold text-muted">kL</span>
-                </h3>
-                <small className="text-muted fs-8 d-block mt-1">
-                  Baseline month
-                </small>
+                {prediction.isNewResident || prediction.previousMonthConsumptionKl == null ? (
+                  <>
+                    <h3 className="fw-extrabold text-muted mb-0">
+                      N/A
+                    </h3>
+                    <small className="text-muted fs-8 d-block mt-1">
+                      New Resident • 1st Month
+                    </small>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="fw-extrabold text-dark mb-0">
+                      {prediction.previousMonthConsumptionKl?.toFixed(2) || '0.00'}{' '}
+                      <span className="fs-6 fw-semibold text-muted">kL</span>
+                    </h3>
+                    <small className="text-muted fs-8 d-block mt-1">
+                      Previous bill cycle
+                    </small>
+                  </>
+                )}
               </div>
             </div>
 
@@ -195,7 +214,9 @@ export default function WaterPredictionCard() {
                   </small>
                   <i
                     className={`bi ${
-                      prediction.trendDirection === 'DECREASE'
+                      prediction.isNewResident || prediction.trendDirection === 'INITIAL_BASELINE'
+                        ? 'bi-info-circle text-primary'
+                        : prediction.trendDirection === 'DECREASE'
                         ? 'bi-arrow-down-right-circle text-success'
                         : prediction.trendDirection === 'INCREASE'
                         ? 'bi-arrow-up-right-circle text-danger'
@@ -203,35 +224,50 @@ export default function WaterPredictionCard() {
                     } fs-5`}
                   ></i>
                 </div>
-                <div className="d-flex align-items-baseline gap-2">
-                  <h3
-                    className={`fw-extrabold mb-0 ${
-                      prediction.trendDirection === 'DECREASE'
-                        ? 'text-success'
-                        : prediction.trendDirection === 'INCREASE'
-                        ? 'text-danger'
-                        : 'text-dark'
-                    }`}
-                  >
-                    {prediction.consumptionDeltaPercentage > 0 ? '+' : ''}
-                    {prediction.consumptionDeltaPercentage?.toFixed(1) || '0.0'}%
-                  </h3>
-                  <span
-                    className={`badge ${
-                      prediction.trendDirection === 'DECREASE'
-                        ? 'bg-success-subtle text-success border border-success-subtle'
-                        : prediction.trendDirection === 'INCREASE'
-                        ? 'bg-danger-subtle text-danger border border-danger-subtle'
-                        : 'bg-light text-muted border'
-                    } fs-8 fw-semibold`}
-                  >
-                    {prediction.trendDirection}
-                  </span>
-                </div>
-                <small className="text-muted fs-8 d-block mt-1">
-                  {prediction.consumptionDeltaKl > 0 ? '+' : ''}
-                  {prediction.consumptionDeltaKl?.toFixed(2)} kL vs previous
-                </small>
+                {prediction.isNewResident || prediction.trendDirection === 'INITIAL_BASELINE' ? (
+                  <>
+                    <div className="d-flex align-items-baseline gap-2">
+                      <span className="badge bg-primary-subtle text-primary border border-primary-subtle fs-7 fw-bold px-2 py-1">
+                        INITIAL BASELINE
+                      </span>
+                    </div>
+                    <small className="text-muted fs-8 d-block mt-1">
+                      Based on {prediction.householdSize || 2} declared occupants
+                    </small>
+                  </>
+                ) : (
+                  <>
+                    <div className="d-flex align-items-baseline gap-2">
+                      <h3
+                        className={`fw-extrabold mb-0 ${
+                          prediction.trendDirection === 'DECREASE'
+                            ? 'text-success'
+                            : prediction.trendDirection === 'INCREASE'
+                            ? 'text-danger'
+                            : 'text-dark'
+                        }`}
+                      >
+                        {prediction.consumptionDeltaPercentage > 0 ? '+' : ''}
+                        {prediction.consumptionDeltaPercentage?.toFixed(1) || '0.0'}%
+                      </h3>
+                      <span
+                        className={`badge ${
+                          prediction.trendDirection === 'DECREASE'
+                            ? 'bg-success-subtle text-success border border-success-subtle'
+                            : prediction.trendDirection === 'INCREASE'
+                            ? 'bg-danger-subtle text-danger border border-danger-subtle'
+                            : 'bg-light text-muted border'
+                        } fs-8 fw-semibold`}
+                      >
+                        {prediction.trendDirection}
+                      </span>
+                    </div>
+                    <small className="text-muted fs-8 d-block mt-1">
+                      {prediction.consumptionDeltaKl > 0 ? '+' : ''}
+                      {prediction.consumptionDeltaKl?.toFixed(2)} kL vs previous
+                    </small>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -240,21 +276,25 @@ export default function WaterPredictionCard() {
           {prediction.recommendation && (
             <div
               className={`alert ${
-                prediction.trendDirection === 'INCREASE'
+                prediction.isNewResident
+                  ? 'alert-primary border-primary-subtle'
+                  : prediction.trendDirection === 'INCREASE'
                   ? 'alert-warning border-warning-subtle'
                   : 'alert-success border-success-subtle'
               } border rounded-3 p-3 mb-4 d-flex align-items-start gap-2.5`}
             >
               <i
                 className={`bi ${
-                  prediction.trendDirection === 'INCREASE'
+                  prediction.isNewResident
+                    ? 'bi-info-circle-fill text-primary'
+                    : prediction.trendDirection === 'INCREASE'
                     ? 'bi-lightbulb-fill text-warning'
                     : 'bi-check-circle-fill text-success'
                 } fs-5 mt-0.5`}
               ></i>
               <div>
                 <strong className="d-block fs-7 text-dark mb-0.5">
-                  Smart Water Conservation Advisory:
+                  {prediction.isNewResident ? 'New Resident Baseline Projection:' : 'Smart Water Conservation Advisory:'}
                 </strong>
                 <p className="fs-7 text-dark mb-0">{prediction.recommendation}</p>
               </div>
@@ -341,6 +381,12 @@ export default function WaterPredictionCard() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
+                {prediction.isNewResident && (
+                  <div className="mt-2 pt-2 border-top text-center text-muted fs-8 d-flex align-items-center justify-content-center gap-1.5">
+                    <i className="bi bi-info-circle text-primary"></i>
+                    <span>Initial household projection. Past usage comparison bars will appear here once your monthly meter readings are recorded.</span>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -394,7 +440,7 @@ export default function WaterPredictionCard() {
 
                 <div className="d-flex align-items-center justify-content-between text-muted fs-8 px-1">
                   <span>Model: {prediction.modelName}</span>
-                  <span>Version: {prediction.modelVersion}</span>
+                  <span>{prediction.isNewResident ? 'Type: Initial Baseline' : `Version: ${prediction.modelVersion}`}</span>
                 </div>
               </div>
             </div>
