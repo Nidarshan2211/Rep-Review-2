@@ -17,7 +17,7 @@ export default function OwnerResidentsPage() {
   // Residents state
   const [residents, setResidents] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ACTIVE');
   const [editingResident, setEditingResident] = useState(null);
 
   // Status Alerts
@@ -134,6 +134,13 @@ export default function OwnerResidentsPage() {
     }
   };
 
+  const activeResidents = residents.filter(r =>
+    r.accountStatus === 'ACTIVE' &&
+    r.apartmentNumber &&
+    !r.apartmentNumber.startsWith('FORMER-') &&
+    r.apartmentNumber.toLowerCase() !== 'vacated'
+  );
+
   if (loading) return <LoadingSpinner text="Loading Resident Onboarding & Management..." />;
 
   const pendingCount = requests.filter(r => r.status === 'PENDING').length;
@@ -176,7 +183,7 @@ export default function OwnerResidentsPage() {
             onClick={() => setActiveTab('residents')}
           >
             <i className="bi bi-people-fill me-1.5"></i>
-            Active Residents ({residents.length})
+            Active Residents ({activeResidents.length})
           </button>
         </div>
       </div>
@@ -396,16 +403,9 @@ export default function OwnerResidentsPage() {
                 </div>
               </div>
               <div className="col-md-6 d-flex align-items-center justify-content-md-end gap-2">
-                <span className="fw-semibold fs-7 text-muted">Account Status:</span>
-                {['ALL', 'ACTIVE', 'INACTIVE'].map(st => (
-                  <button
-                    key={st}
-                    className={`btn btn-sm rounded-pill fw-semibold ${statusFilter === st ? 'btn-dark' : 'btn-outline-secondary bg-white'}`}
-                    onClick={() => setStatusFilter(st)}
-                  >
-                    {st}
-                  </button>
-                ))}
+                <span className="badge bg-success-subtle text-success border border-success-subtle px-3 py-1.5 rounded-pill fw-semibold">
+                  <i className="bi bi-check-circle-fill me-1"></i> Active Occupants Only ({activeResidents.length})
+                </span>
               </div>
             </div>
           </div>
@@ -426,8 +426,8 @@ export default function OwnerResidentsPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {residents.length ? (
-                      residents.map(r => (
+                    {activeResidents.length ? (
+                      activeResidents.map(r => (
                         <tr key={r.residentId}>
                           <td className="ps-4">
                             <div className="fw-bold text-dark">{r.name}</div>
@@ -441,22 +441,20 @@ export default function OwnerResidentsPage() {
                           <td>{r.buildingName}</td>
                           <td><code className="text-dark fw-bold">{r.meterNumber || 'WM-Fixture'}</code></td>
                           <td>
-                            <span className={`badge ${r.accountStatus === 'ACTIVE' ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-secondary-subtle text-dark border'}`}>
-                              {r.accountStatus === 'ACTIVE' ? 'ACTIVE OCCUPANT' : 'FORMER RESIDENT'}
+                            <span className="badge bg-success-subtle text-success border border-success-subtle">
+                              ACTIVE OCCUPANT
                             </span>
                           </td>
                           <td className="text-end pe-4">
                             <div className="d-inline-flex align-items-center gap-1.5">
-                              {r.accountStatus === 'ACTIVE' && (
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-warning fw-semibold px-2 py-1 fs-8"
-                                  title="Remove resident from unit and vacate flat"
-                                  onClick={() => handleVacateResident(r.residentId, r.name, r.apartmentNumber)}
-                                >
-                                  <i className="bi bi-box-arrow-right me-1"></i> Vacate Unit
-                                </button>
-                              )}
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-warning fw-semibold px-2 py-1 fs-8"
+                                title="Remove resident from unit and vacate flat"
+                                onClick={() => handleVacateResident(r.residentId, r.name, r.apartmentNumber)}
+                              >
+                                <i className="bi bi-box-arrow-right me-1"></i> Vacate Unit
+                              </button>
                               <button
                                 type="button"
                                 className="btn btn-sm btn-outline-secondary px-2 py-1"
@@ -481,8 +479,12 @@ export default function OwnerResidentsPage() {
                       <tr>
                         <td colSpan="6" className="text-center py-5 text-muted">
                           <i className="bi bi-people text-secondary display-5 d-block mb-2"></i>
-                          <h6 className="fw-bold text-dark">No Residents Found</h6>
-                          <p className="fs-8 text-muted mb-0">No residents match your search or filter criteria.</p>
+                          <h6 className="fw-bold text-dark">No Active Residents Found</h6>
+                          <p className="fs-8 text-muted mb-0">
+                            {searchQuery
+                              ? 'No active occupants match your search query.'
+                              : 'No active occupants currently residing in your properties.'}
+                          </p>
                         </td>
                       </tr>
                     )}

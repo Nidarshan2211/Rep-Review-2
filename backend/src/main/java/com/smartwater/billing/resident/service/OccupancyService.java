@@ -194,6 +194,11 @@ public class OccupancyService {
         // Update Resident profile
         resident.setBuilding(building);
         resident.setApartmentNumber(apartment.getRoomNumber());
+        resident.setAccountStatus(Resident.AccountStatus.ACTIVE);
+        if (resident.getUser() != null) {
+            resident.getUser().setStatus(User.UserStatus.ACTIVE);
+            userRepository.save(resident.getUser());
+        }
         resident = residentRepository.save(resident);
 
         // Audit log in resident_history
@@ -693,6 +698,11 @@ public class OccupancyService {
             // 6. Connect resident to building and room
             resident.setBuilding(building);
             resident.setApartmentNumber(apartment.getRoomNumber());
+            resident.setAccountStatus(Resident.AccountStatus.ACTIVE);
+            if (resident.getUser() != null) {
+                resident.getUser().setStatus(User.UserStatus.ACTIVE);
+                userRepository.save(resident.getUser());
+            }
             residentRepository.save(resident);
 
             // Audit log in resident_history

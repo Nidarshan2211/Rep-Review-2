@@ -232,7 +232,8 @@ public class BuildingOwnerService {
 
         // 2. Leak feedback and incidents
         entityManager.createNativeQuery(
-                "DELETE FROM leak_feedback WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a)"
+                "DELETE FROM leak_feedback WHERE apartment_id IN (SELECT a.apartment_id FROM (SELECT apartment_id FROM apartments WHERE building_id = :bldgId) a) " +
+                "OR usage_id IN (SELECT u.usage_id FROM (SELECT usage_id FROM water_usage WHERE meter_id IN (SELECT meter_id FROM water_meters WHERE building_id = :bldgId)) u)"
         ).setParameter("bldgId", buildingId).executeUpdate();
 
         entityManager.createNativeQuery(
@@ -338,6 +339,7 @@ public class BuildingOwnerService {
             deleteBuildingCascade(buildingId);
         } finally {
             entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 1").executeUpdate();
+            entityManager.clear();
         }
     }
 
@@ -519,7 +521,7 @@ public class BuildingOwnerService {
         return list;
     }
 
-@Transactional
+    @Transactional
     public void leaveApplication(String email) {
         BuildingOwner owner = getOwnerByUserEmail(email);
         Long ownerId = owner.getOwnerId();
@@ -527,18 +529,19 @@ public class BuildingOwnerService {
         String phone = owner.getPhone() != null ? owner.getPhone() : "";
         Long userId = owner.getUser() != null ? owner.getUser().getUserId() : null;
 
-        // 1. Audit log in owner_history using JPA entity
+        // 1. Audit log in owner_history using direct native SQL
         try {
-            ownerHistoryRepository.save(OwnerHistory.builder()
-                    .ownerId(ownerId)
-                    .ownerName(ownerName)
-                    .email(email)
-                    .phone(phone)
-                    .eventType("REMOVED")
-                    .details("Owner voluntarily left the application and closed account.")
-                    .actor(ownerName + " (Self)")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            entityManager.createNativeQuery(
+                    "INSERT INTO owner_history (owner_id, owner_name, email, phone, event_type, details, actor, timestamp) " +
+                    "VALUES (:oid, :oname, :email, :phone, 'REMOVED', :details, :actor, NOW())"
+            )
+            .setParameter("oid", ownerId)
+            .setParameter("oname", ownerName)
+            .setParameter("email", email)
+            .setParameter("phone", phone)
+            .setParameter("details", "Owner voluntarily left the application and closed account.")
+            .setParameter("actor", ownerName + " (Self)")
+            .executeUpdate();
         } catch (Exception e) {
             log.warn("Failed to record owner history audit: {}", e.getMessage());
         }
@@ -576,6 +579,7 @@ public class BuildingOwnerService {
             }
         } finally {
             entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 1").executeUpdate();
+            entityManager.clear();
         }
     }
 }

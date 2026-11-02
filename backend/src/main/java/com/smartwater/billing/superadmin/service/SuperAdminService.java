@@ -128,17 +128,18 @@ public class SuperAdminService {
         // 1. Log REMOVED event into owner_history table before deletion
         String email = owner.getUser() != null ? owner.getUser().getEmail() : "N/A";
         String phone = owner.getPhone() != null ? owner.getPhone() : "";
+        Long userId = owner.getUser() != null ? owner.getUser().getUserId() : null;
+
         try {
-            ownerHistoryRepository.save(OwnerHistory.builder()
-                    .ownerId(ownerId)
-                    .ownerName(owner.getName())
-                    .email(email)
-                    .phone(phone)
-                    .eventType("REMOVED")
-                    .details("Building owner removed from platform by Super Admin.")
-                    .actor("System Super Admin")
-                    .timestamp(LocalDateTime.now())
-                    .build());
+            entityManager.createNativeQuery(
+                    "INSERT INTO owner_history (owner_id, owner_name, email, phone, event_type, details, actor, timestamp) " +
+                    "VALUES (:oid, :oname, :email, :phone, 'REMOVED', 'Building owner removed from platform by Super Admin.', 'System Super Admin', NOW())"
+            )
+            .setParameter("oid", ownerId)
+            .setParameter("oname", owner.getName())
+            .setParameter("email", email)
+            .setParameter("phone", phone)
+            .executeUpdate();
         } catch (Exception ignored) {}
 
         try {
@@ -156,7 +157,6 @@ public class SuperAdminService {
                     .executeUpdate();
 
             // 4. Delete building owner profile
-            Long userId = owner.getUser() != null ? owner.getUser().getUserId() : null;
             entityManager.createNativeQuery("DELETE FROM building_owners WHERE owner_id = :ownerId")
                     .setParameter("ownerId", ownerId)
                     .executeUpdate();
@@ -173,6 +173,7 @@ public class SuperAdminService {
             }
         } finally {
             entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 1").executeUpdate();
+            entityManager.clear();
         }
     }
 
