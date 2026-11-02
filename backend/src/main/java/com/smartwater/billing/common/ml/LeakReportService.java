@@ -107,15 +107,25 @@ public class LeakReportService {
         List<WaterUsage> usageHistory = usageRepository.findByMeterMeterIdOrderByYearDescMonthDesc(meter.getMeterId());
         WaterUsage latestUsage = usageHistory.isEmpty() ? null : usageHistory.get(0);
 
+        final int defaultHh = (occ != null && occ.getHouseholdSize() != null && occ.getHouseholdSize() > 0)
+                ? occ.getHouseholdSize()
+                : 2;
+
         List<ResidentLeakHistoryItem> historyItems = usageHistory.stream().limit(12).map(u -> {
             Optional<LeakFeedback> uFb = feedbackRepository.findFirstByUsageUsageIdOrderByCreatedAtDesc(u.getUsageId());
+            Double minVal = u.getExpectedMin();
+            Double maxVal = u.getExpectedMax();
+            if (minVal == null || maxVal == null || (minVal == 0.0 && maxVal == 0.0)) {
+                minVal = Math.round((defaultHh * 0.10 * 30) * 10.0) / 10.0;
+                maxVal = Math.round((defaultHh * 0.25 * 30) * 10.0) / 10.0;
+            }
             return ResidentLeakHistoryItem.builder()
                     .usageId(u.getUsageId())
                     .month(u.getMonth())
                     .year(u.getYear())
                     .unitsConsumed(u.getUnitsConsumed())
-                    .expectedMin(u.getExpectedMin())
-                    .expectedMax(u.getExpectedMax())
+                    .expectedMin(minVal)
+                    .expectedMax(maxVal)
                     .anomalyStatus(u.getAnomalyStatus() != null ? u.getAnomalyStatus() : "NORMAL")
                     .anomalyScore(u.getAnomalyScore())
                     .hasFeedback(uFb.isPresent())
@@ -165,6 +175,13 @@ public class LeakReportService {
         String feedbackNote = fbOpt.map(LeakFeedback::getNote).orElse(null);
         LocalDateTime feedbackCreatedAt = fbOpt.map(LeakFeedback::getCreatedAt).orElse(null);
 
+        Double currentMin = latestUsage.getExpectedMin();
+        Double currentMax = latestUsage.getExpectedMax();
+        if (currentMin == null || currentMax == null || (currentMin == 0.0 && currentMax == 0.0)) {
+            currentMin = Math.round((defaultHh * 0.10 * 30) * 10.0) / 10.0;
+            currentMax = Math.round((defaultHh * 0.25 * 30) * 10.0) / 10.0;
+        }
+
         return ResidentLeakStatusResponse.builder()
                 .usageId(latestUsage.getUsageId())
                 .apartmentId(apt != null ? apt.getApartmentId() : null)
@@ -173,8 +190,8 @@ public class LeakReportService {
                 .month(latestUsage.getMonth())
                 .year(latestUsage.getYear())
                 .unitsConsumed(latestUsage.getUnitsConsumed())
-                .expectedMin(latestUsage.getExpectedMin() != null ? latestUsage.getExpectedMin() : 0.0)
-                .expectedMax(latestUsage.getExpectedMax() != null ? latestUsage.getExpectedMax() : 25.0)
+                .expectedMin(currentMin)
+                .expectedMax(currentMax)
                 .anomalyScore(latestUsage.getAnomalyScore())
                 .anomalyStatus(latestUsage.getAnomalyStatus() != null ? latestUsage.getAnomalyStatus() : "NORMAL")
                 .anomalyReason(latestUsage.getAnomalyReason() != null ? latestUsage.getAnomalyReason() : "Consumption appears normal.")

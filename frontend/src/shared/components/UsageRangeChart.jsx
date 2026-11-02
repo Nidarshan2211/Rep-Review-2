@@ -137,15 +137,40 @@ export default function UsageRangeChart({ data = [], height = 320 }) {
             wrapperStyle={{ fontSize: '0.8rem', paddingBottom: '8px' }}
           />
 
+          {/* Shaded Expected Normal Bandwidth Corridor */}
+          <Area
+            type="monotone"
+            dataKey="rangeMin"
+            stackId="bandwidth"
+            stroke="none"
+            fill="none"
+            legendType="none"
+            tooltipType="none"
+            isAnimationActive={false}
+          />
+          <Area
+            type="monotone"
+            dataKey="rangeDelta"
+            stackId="bandwidth"
+            name="Normal Bandwidth Corridor"
+            stroke="none"
+            fill="url(#bandGradient)"
+            legendType="none"
+            tooltipType="none"
+            isAnimationActive={false}
+          />
+
           {/* Upper Bound Line */}
           <Line
             type="monotone"
             dataKey="expectedMax"
             name="Expected Max (Upper Limit)"
             stroke="#E76F51"
-            strokeWidth={1.5}
+            strokeWidth={2}
             strokeDasharray="4 4"
-            dot={false}
+            dot={{ r: 4, fill: '#E76F51', stroke: '#ffffff', strokeWidth: 1.5 }}
+            activeDot={{ r: 6 }}
+            connectNulls={true}
           />
 
           {/* Lower Bound Line */}
@@ -154,9 +179,11 @@ export default function UsageRangeChart({ data = [], height = 320 }) {
             dataKey="expectedMin"
             name="Expected Min (Lower Limit)"
             stroke="#2A9D8F"
-            strokeWidth={1.5}
+            strokeWidth={2}
             strokeDasharray="4 4"
-            dot={false}
+            dot={{ r: 4, fill: '#2A9D8F', stroke: '#ffffff', strokeWidth: 1.5 }}
+            activeDot={{ r: 6 }}
+            connectNulls={true}
           />
 
           {/* Actual Consumption */}

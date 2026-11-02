@@ -77,17 +77,23 @@ export default function ResidentLeakStatusPage() {
   const aptLabel = data?.apartmentNumber ? `Flat ${data.apartmentNumber}` : 'Your Flat';
   const isHhConfirmed = Boolean(data?.householdSizeConfirmed);
 
-  // Format historical data for UsageRangeChart
+  // Format historical data for UsageRangeChart - sorted chronologically (past -> present)
+  const defaultHh = data?.householdSize || 2;
+  const fallbackMin = Math.round(defaultHh * 0.10 * 30 * 10) / 10;
+  const fallbackMax = Math.round(defaultHh * 0.25 * 30 * 10) / 10;
+
   const chartData = (data?.recentHistory || []).map((h) => ({
     label: `${h.month}/${h.year}`,
+    month: h.month,
+    year: h.year,
     actual: h.unitsConsumed,
-    expectedMin: h.expectedMin,
-    expectedMax: h.expectedMax,
+    expectedMin: h.expectedMin != null ? h.expectedMin : fallbackMin,
+    expectedMax: h.expectedMax != null ? h.expectedMax : fallbackMax,
     status: h.anomalyStatus,
     riskScore: h.anomalyScore,
     hasFeedback: h.hasFeedback,
     latestFeedback: h.latestFeedback
-  }));
+  })).slice().sort((a, b) => (a.year - b.year) || (a.month - b.month));
 
   return (
     <div className="container-fluid py-4">
