@@ -6,6 +6,7 @@ import LoadingSpinner from '../../shared/components/LoadingSpinner';
 export default function AdminDashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [deletionNotice, setDeletionNotice] = useState(null);
 
   const fetchStats = async () => {
     try {
@@ -45,10 +46,13 @@ export default function AdminDashboard() {
   const handleDeleteOwner = async (ownerId, ownerName) => {
     if (window.confirm(`Are you sure you want to remove building owner "${ownerName}" and all their associated properties from the platform? This action cannot be undone.`)) {
       try {
+        setDeletionNotice(null);
         await API.delete(`/admin/owners/${ownerId}`);
         fetchStats();
       } catch (err) {
-        alert(err.response?.data?.message || 'Failed to delete building owner');
+        const errorMsg = err.response?.data?.message || 'Failed to delete building owner';
+        setDeletionNotice(errorMsg);
+        alert(errorMsg);
       }
     }
   };
@@ -78,6 +82,23 @@ export default function AdminDashboard() {
           <StatCard title="Total Residents" value={stats?.totalResidents || 0} icon="bi-people" />
         </div>
       </div>
+
+      {deletionNotice && (
+        <div className="alert alert-warning border-warning shadow-sm alert-dismissible fade show mb-4" role="alert">
+          <div className="d-flex align-items-start gap-3">
+            <i className="bi bi-exclamation-triangle-fill fs-3 text-warning flex-shrink-0 mt-1"></i>
+            <div>
+              <h5 className="alert-heading fw-bold mb-1">Owner Deletion Safeguard: Outstanding Resident Balance</h5>
+              <p className="mb-2 text-dark">{deletionNotice}</p>
+              <div className="small text-muted">
+                <i className="bi bi-info-circle me-1"></i>
+                Notifications and emails have been automatically dispatched to the building owner and all residents with outstanding balances requesting them to finish all billing and settle accounts before deletion.
+              </div>
+            </div>
+            <button type="button" className="btn-close ms-auto" aria-label="Close" onClick={() => setDeletionNotice(null)}></button>
+          </div>
+        </div>
+      )}
 
       {/* Building Owners Directory */}
       <div className="card glass-card border shadow-sm bg-white">

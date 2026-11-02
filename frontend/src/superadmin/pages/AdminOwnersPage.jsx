@@ -6,6 +6,7 @@ export default function AdminOwnersPage() {
   const [owners, setOwners] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [deletionNotice, setDeletionNotice] = useState(null);
 
   const fetchOwners = () => {
     API.get('/admin/owners')
@@ -21,10 +22,13 @@ export default function AdminOwnersPage() {
   const handleDeleteOwner = async (ownerId, ownerName) => {
     if (window.confirm(`Are you sure you want to remove building owner "${ownerName}" and all their associated properties from the platform? This action cannot be undone.`)) {
       try {
+        setDeletionNotice(null);
         await API.delete(`/admin/owners/${ownerId}`);
         setOwners(prev => prev.filter(o => o.ownerId !== ownerId));
       } catch (err) {
-        alert(err.response?.data?.message || 'Failed to delete building owner');
+        const errorMsg = err.response?.data?.message || 'Failed to delete building owner';
+        setDeletionNotice(errorMsg);
+        alert(errorMsg);
       }
     }
   };
@@ -56,6 +60,23 @@ export default function AdminOwnersPage() {
           </div>
         </div>
       </div>
+
+      {deletionNotice && (
+        <div className="alert alert-warning border-warning shadow-sm alert-dismissible fade show mb-4" role="alert">
+          <div className="d-flex align-items-start gap-3">
+            <i className="bi bi-exclamation-triangle-fill fs-3 text-warning flex-shrink-0 mt-1"></i>
+            <div>
+              <h5 className="alert-heading fw-bold mb-1">Owner Deletion Safeguard: Outstanding Resident Balance</h5>
+              <p className="mb-2 text-dark">{deletionNotice}</p>
+              <div className="small text-muted">
+                <i className="bi bi-info-circle me-1"></i>
+                Notifications and emails have been automatically dispatched to the building owner and all residents with outstanding balances requesting them to finish all billing and settle accounts before deletion.
+              </div>
+            </div>
+            <button type="button" className="btn-close ms-auto" aria-label="Close" onClick={() => setDeletionNotice(null)}></button>
+          </div>
+        </div>
+      )}
 
       <div className="card glass-card border shadow-sm bg-white">
         <div className="card-body p-0">

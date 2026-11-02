@@ -32,4 +32,7 @@ public interface BillRepository extends JpaRepository<Bill, Long> {
 
     @Query("SELECT SUM(b.amount) FROM Bill b WHERE b.status = 'PAID'")
     Double getTotalSystemRevenue();
+
+    @Query("SELECT b FROM Bill b WHERE b.resident.building.owner.ownerId = :ownerId AND b.status IN ('UNPAID', 'OVERDUE')")
+    List<Bill> findUnpaidBillsByOwnerId(@Param("ownerId") Long ownerId);
 }

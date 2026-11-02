@@ -1,9 +1,20 @@
 package com.smartwater.billing.superadmin.service;
 
 import com.smartwater.billing.common.dto.DashboardDTOs.*;
+import com.smartwater.billing.common.entity.Bill;
+import com.smartwater.billing.common.entity.Invoice;
 import com.smartwater.billing.common.entity.User;
+import com.smartwater.billing.common.exception.BadRequestException;
 import com.smartwater.billing.common.exception.ResourceNotFoundException;
 import com.smartwater.billing.common.repository.*;
+import com.smartwater.billing.common.service.EmailService;
+import com.smartwater.billing.resident.entity.Notification;
+import com.smartwater.billing.resident.repository.NotificationRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import com.smartwater.billing.owner.entity.Building;
 import com.smartwater.billing.owner.entity.BuildingOwner;
 import com.smartwater.billing.owner.repository.*;
@@ -26,10 +37,15 @@ import java.util.stream.Collectors;
 @Service
 public class SuperAdminService {
 
+    private static final Logger log = LoggerFactory.getLogger(SuperAdminService.class);
+
     private final BuildingOwnerRepository ownerRepository;
     private final BuildingRepository buildingRepository;
     private final ResidentRepository residentRepository;
     private final BillRepository billRepository;
+    private final InvoiceRepository invoiceRepository;
+    private final NotificationRepository notificationRepository;
+    private final EmailService emailService;
     private final UserRepository userRepository;
     private final BuildingOwnerService buildingOwnerService;
     private final OwnerHistoryRepository ownerHistoryRepository;
@@ -42,6 +58,9 @@ public class SuperAdminService {
             BuildingRepository buildingRepository,
             ResidentRepository residentRepository,
             BillRepository billRepository,
+            InvoiceRepository invoiceRepository,
+            NotificationRepository notificationRepository,
+            EmailService emailService,
             UserRepository userRepository,
             BuildingOwnerService buildingOwnerService,
             OwnerHistoryRepository ownerHistoryRepository
@@ -50,6 +69,9 @@ public class SuperAdminService {
         this.buildingRepository = buildingRepository;
         this.residentRepository = residentRepository;
         this.billRepository = billRepository;
+        this.invoiceRepository = invoiceRepository;
+        this.notificationRepository = notificationRepository;
+        this.emailService = emailService;
         this.userRepository = userRepository;
         this.buildingOwnerService = buildingOwnerService;
         this.ownerHistoryRepository = ownerHistoryRepository;
@@ -126,12 +148,149 @@ public class SuperAdminService {
         return convertToOwnerDTO(owner);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BadRequestException.class)
     public void deleteOwner(Long ownerId) {
         BuildingOwner owner = ownerRepository.findById(ownerId)
                 .orElseThrow(() -> new ResourceNotFoundException("Building Owner not found with id: " + ownerId));
 
-        // 1. Log REMOVED event into owner_history table before deletion
+        // 1. Check if any resident under this owner has an outstanding/unpaid balance payment
+        List<Bill> unpaidBills = billRepository.findUnpaidBillsByOwnerId(ownerId);
+        List<Invoice> unpaidInvoices = invoiceRepository.findUnpaidInvoicesByOwnerId(ownerId);
+
+        Map<Long, ResidentBalanceRecord> balanceMap = new LinkedHashMap<>();
+
+        for (Bill b : unpaidBills) {
+            Resident r = b.getResident();
+            if (r != null) {
+                double amt = b.getAmount() != null ? b.getAmount() : 0.0;
+                Long cycleId = b.getBillingCycle() != null ? b.getBillingCycle().getId() : null;
+                balanceMap.computeIfAbsent(r.getResidentId(), k -> new ResidentBalanceRecord(r))
+                        .addBill(cycleId, amt, b.getBillId(), b.getStatus().name());
+            }
+        }
+
+        for (Invoice inv : unpaidInvoices) {
+            Resident r = inv.getResident();
+            if (r != null) {
+                double amt = inv.getTotalAmount() != null ? inv.getTotalAmount().doubleValue() : 0.0;
+                Long cycleId = inv.getBillingCycle() != null ? inv.getBillingCycle().getId() : null;
+                balanceMap.computeIfAbsent(r.getResidentId(), k -> new ResidentBalanceRecord(r))
+                        .addInvoice(cycleId, amt, inv.getId(), inv.getStatus().name());
+            }
+        }
+
+        if (!balanceMap.isEmpty()) {
+            double totalBalance = 0.0;
+            StringBuilder residentSummary = new StringBuilder();
+
+            for (ResidentBalanceRecord rec : balanceMap.values()) {
+                totalBalance += rec.getTotalBalance();
+                if (residentSummary.length() > 0) residentSummary.append(", ");
+                residentSummary.append(String.format("%s (Flat %s: ₹%.2f)",
+                        rec.getResident().getName(),
+                        rec.getResident().getApartmentNumber() != null ? rec.getResident().getApartmentNumber() : "N/A",
+                        rec.getTotalBalance()));
+            }
+
+            // A. Send in-app and email notifications to each resident who has a pending balance
+            for (ResidentBalanceRecord rec : balanceMap.values()) {
+                Resident r = rec.getResident();
+                String buildingName = (r.getBuilding() != null && r.getBuilding().getBuildingName() != null)
+                        ? r.getBuilding().getBuildingName()
+                        : "your property";
+
+                try {
+                    Notification residentNotif = Notification.builder()
+                            .resident(r)
+                            .title("Urgent: Super Admin Notice - Settle Outstanding Water Bill")
+                            .message(String.format(
+                                    "Super Admin has reviewed the property billing records and requested all billing for %s to be finished and settled immediately. " +
+                                    "You have an outstanding water balance of ₹%.2f. Please clear your dues promptly in your resident dashboard.",
+                                    buildingName,
+                                    rec.getTotalBalance()
+                            ))
+                            .isRead(false)
+                            .createdAt(LocalDateTime.now())
+                            .build();
+                    notificationRepository.save(residentNotif);
+                } catch (Exception ex) {
+                    log.warn("Failed to create in-app notification for resident #{}: {}", r.getResidentId(), ex.getMessage());
+                }
+
+                if (r.getEmail() != null && !r.getEmail().isBlank()) {
+                    try {
+                        emailService.sendNotificationEmail(
+                                r.getEmail(),
+                                r.getName(),
+                                "Notice from Super Admin: Settle Outstanding Water Bill",
+                                String.format(
+                                        "Super Admin has requested all billing to be completed and settled for %s immediately.\n\n" +
+                                        "Your resident account currently has an outstanding water bill balance of \u20B9%.2f.\n\n" +
+                                        "Please log into your AquaFlow portal at http://localhost:5173/login and complete your payment.",
+                                        buildingName,
+                                        rec.getTotalBalance()
+                                )
+                        );
+                    } catch (Exception ex) {
+                        log.warn("Failed to send email to resident {}: {}", r.getEmail(), ex.getMessage());
+                    }
+                }
+            }
+
+            // B. Send email notification to the Building Owner
+            String ownerEmail = owner.getUser() != null ? owner.getUser().getEmail() : "N/A";
+            String ownerPhone = owner.getPhone() != null ? owner.getPhone() : "";
+
+            if (ownerEmail != null && !ownerEmail.isBlank() && !"N/A".equalsIgnoreCase(ownerEmail)) {
+                try {
+                    emailService.sendNotificationEmail(
+                            ownerEmail,
+                            owner.getName(),
+                            "URGENT: Super Admin Request - Settle All Billing Before Account Deletion",
+                            String.format(
+                                    "Super Admin attempted to delete your building owner account, but the action was BLOCKED because %d resident(s) have outstanding balance payments totaling \u20B9%.2f.\n\n" +
+                                    "Super Admin has explicitly requested that you finish all billing cycles, collect outstanding resident balances, and clear all pending dues before this account can be deleted.\n\n" +
+                                    "Residents with pending balances:\n%s",
+                                    balanceMap.size(),
+                                    totalBalance,
+                                    residentSummary.toString()
+                            )
+                    );
+                } catch (Exception ex) { 
+                    log.warn("Failed to send notification email to building owner {}: {}", ownerEmail, ex.getMessage());
+                }
+            }
+
+            // C. Log DELETION_BLOCKED in owner_history
+            try {
+                entityManager.createNativeQuery(
+                        "INSERT INTO owner_history (owner_id, owner_name, email, phone, event_type, details, actor, timestamp) " +
+                        "VALUES (:oid, :oname, :email, :phone, 'DELETION_BLOCKED', :details, 'System Super Admin', NOW())"
+                )
+                .setParameter("oid", ownerId)
+                .setParameter("oname", owner.getName())
+                .setParameter("email", ownerEmail)
+                .setParameter("phone", ownerPhone)
+                .setParameter("details", String.format(
+                        "Deletion blocked: %d resident(s) have pending balance payments totaling ₹%.2f. Super Admin requested owner and residents to finish all billing.",
+                        balanceMap.size(), totalBalance))
+                .executeUpdate();
+            } catch (Exception ex) {
+                log.warn("Failed to log DELETION_BLOCKED event in owner_history: {}", ex.getMessage());
+            }
+
+            // D. Notify Super Admin by throwing BadRequestException
+            throw new BadRequestException(String.format(
+                    "Cannot delete building owner '%s': %d resident(s) have pending balance payments totaling ₹%.2f [%s]. " +
+                    "Super Admin has blocked deletion and dispatched notifications requesting all billing to be finished and settled.",
+                    owner.getName(),
+                    balanceMap.size(),
+                    totalBalance,
+                    residentSummary.toString()
+            ));
+        }
+
+        // 2. Log REMOVED event into owner_history table before deletion
         String email = owner.getUser() != null ? owner.getUser().getEmail() : "N/A";
         String phone = owner.getPhone() != null ? owner.getPhone() : "";
         Long userId = owner.getUser() != null ? owner.getUser().getUserId() : null;
@@ -243,5 +402,43 @@ public class SuperAdminService {
                 .totalBuildings(totalBuildings)
                 .createdAt(owner.getCreatedAt() != null ? owner.getCreatedAt().toString() : "")
                 .build();
+    }
+
+    private static class ResidentBalanceRecord {
+        private final Resident resident;
+        private final Map<Long, Double> cycleBalances = new HashMap<>();
+        private double nonCycleBalance = 0.0;
+
+        public ResidentBalanceRecord(Resident resident) {
+            this.resident = resident;
+        }
+
+        public Resident getResident() {
+            return resident;
+        }
+
+        public void addBill(Long cycleId, double amount, Long billId, String status) {
+            if (cycleId != null) {
+                cycleBalances.put(cycleId, Math.max(cycleBalances.getOrDefault(cycleId, 0.0), amount));
+            } else {
+                nonCycleBalance += amount;
+            }
+        }
+
+        public void addInvoice(Long cycleId, double amount, Long invoiceId, String status) {
+            if (cycleId != null) {
+                cycleBalances.put(cycleId, Math.max(cycleBalances.getOrDefault(cycleId, 0.0), amount));
+            } else {
+                nonCycleBalance += amount;
+            }
+        }
+
+        public double getTotalBalance() {
+            double total = nonCycleBalance;
+            for (double b : cycleBalances.values()) {
+                total += b;
+            }
+            return Math.round(total * 100.0) / 100.0;
+        }
     }
 }
