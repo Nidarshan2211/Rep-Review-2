@@ -114,7 +114,7 @@ public class BulkBillingService {
         }
 
         List<Resident> residents = residentRepository.findByBuildingBuildingId(buildingId).stream()
-                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE)
+                .filter(this::isCurrentResident)
                 .collect(Collectors.toList());
         if (residents.isEmpty()) {
             throw new BadRequestException("No active residents found in building '" + building.getBuildingName() + "'. Please add residents before generating a template.");
@@ -210,7 +210,7 @@ public class BulkBillingService {
                 .orElseThrow(() -> new ResourceNotFoundException("Billing cycle not found with id: " + cycleId));
 
         List<Resident> residents = residentRepository.findByBuildingBuildingId(buildingId).stream()
-                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE)
+                .filter(this::isCurrentResident)
                 .collect(Collectors.toList());
         List<WaterUsage> recordedUsages = usageRepository.findByBillingCycleId(cycleId);
         
@@ -273,7 +273,7 @@ public class BulkBillingService {
         validateRequiredHeaders(colMap);
 
         List<Resident> buildingResidents = residentRepository.findByBuildingBuildingId(buildingId).stream()
-                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE)
+                .filter(this::isCurrentResident)
                 .collect(Collectors.toList());
         Map<Long, Resident> residentMap = new HashMap<>();
         for (Resident r : buildingResidents) {
@@ -758,7 +758,7 @@ public class BulkBillingService {
 
         // 3. Existing Bills Guard (Ensure cycle hasn't had bills generated previously)
         List<Resident> buildingResidents = residentRepository.findByBuildingBuildingId(buildingId).stream()
-                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE)
+                .filter(this::isCurrentResident)
                 .collect(Collectors.toList());
         if (buildingResidents.isEmpty()) {
             throw new BadRequestException("No active residents found in building '" + building.getBuildingName() + "'. Cannot generate bills.");
@@ -1085,5 +1085,16 @@ public class BulkBillingService {
 
         BigDecimal total = tier1Amount.add(tier2Amount).add(tier3Amount);
         return total.doubleValue();
+    }
+
+    private boolean isCurrentResident(Resident r) {
+        if (r == null) return false;
+        if (r.getAccountStatus() != Resident.AccountStatus.ACTIVE) return false;
+        String apt = r.getApartmentNumber();
+        if (apt == null || apt.isBlank()) return false;
+        String upperApt = apt.trim().toUpperCase();
+        if (upperApt.startsWith("FORMER-")) return false;
+        if (upperApt.equals("VACATED") || upperApt.equals("REMOVED") || upperApt.equals("PENDING") || upperApt.equals("N/A")) return false;
+        return true;
     }
 }

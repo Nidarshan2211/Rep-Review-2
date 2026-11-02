@@ -75,6 +75,14 @@ public class BillingService {
             throw new BadRequestException("Unauthorized access to resident building!");
         }
 
+        if (resident.getAccountStatus() != Resident.AccountStatus.ACTIVE 
+                || resident.getApartmentNumber() == null 
+                || resident.getApartmentNumber().toUpperCase().startsWith("FORMER-")
+                || resident.getApartmentNumber().equalsIgnoreCase("Vacated")
+                || resident.getApartmentNumber().equalsIgnoreCase("Removed")) {
+            throw new BadRequestException("Cannot generate bill: Resident " + resident.getName() + " is no longer an active occupant in this building.");
+        }
+
         WaterUsage usage = usageRepository.findById(request.getUsageId())
                 .orElseThrow(() -> new ResourceNotFoundException("Usage record not found with id: " + request.getUsageId()));
 

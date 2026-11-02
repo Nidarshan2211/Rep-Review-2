@@ -113,13 +113,12 @@ public class BillingCycleService {
         // 1. Get 3-Tier Tariff Plan for this Cycle
         TariffPlan tariff = tariffCalculationService.getOrGenerateTariffForCycle(cycle);
 
-        // 2. Find residents belonging STRICTLY to this building (ACTIVE accounts only)
+        // 2. Find residents currently living in this building (ACTIVE accounts only)
         List<Resident> residents = residentRepository.findByBuildingBuildingId(buildingId).stream()
-                .filter(r -> r.getApartmentNumber() == null || (!r.getApartmentNumber().equalsIgnoreCase("Removed") && !r.getApartmentNumber().equalsIgnoreCase("Vacated")))
-                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE || r.getInvitationStatus() == Resident.InvitationStatus.PENDING || r.getInvitationStatus() == Resident.InvitationStatus.ACCEPTED)
+                .filter(this::isCurrentResident)
                 .collect(Collectors.toList());
         if (residents.isEmpty()) {
-            throw new BadRequestException("Finalize failed: No residents found in building '" + cycle.getBuilding().getBuildingName() + "'.");
+            throw new BadRequestException("Finalize failed: No active residents currently living in building '" + cycle.getBuilding().getBuildingName() + "'.");
         }
 
         // 3. Validation: Verify ALL active residents have a recorded WaterUsage for this exact cycle
@@ -372,6 +371,17 @@ public class BillingCycleService {
 
     public List<BillingCycle> getBuildingCycles(Long buildingId) {
         return billingCycleRepository.findByBuildingBuildingIdOrderByStartDateDesc(buildingId);
+    }
+
+    private boolean isCurrentResident(Resident r) {
+        if (r == null) return false;
+        if (r.getAccountStatus() != Resident.AccountStatus.ACTIVE) return false;
+        String apt = r.getApartmentNumber();
+        if (apt == null || apt.isBlank()) return false;
+        String upperApt = apt.trim().toUpperCase();
+        if (upperApt.startsWith("FORMER-")) return false;
+        if (upperApt.equals("VACATED") || upperApt.equals("REMOVED") || upperApt.equals("PENDING") || upperApt.equals("N/A")) return false;
+        return true;
     }
 
     private static class NotificationTask {

@@ -800,7 +800,16 @@ public class ResidentService {
         }
 
         // Get all residents in the building to calculate building average
-        List<Resident> buildingResidents = residentRepository.findByBuildingBuildingId(resident.getBuilding().getBuildingId());
+        List<Resident> buildingResidents = residentRepository.findByBuildingBuildingId(resident.getBuilding().getBuildingId()).stream()
+                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE
+                        && r.getApartmentNumber() != null
+                        && !r.getApartmentNumber().isBlank()
+                        && !r.getApartmentNumber().toUpperCase().startsWith("FORMER-")
+                        && !r.getApartmentNumber().equalsIgnoreCase("Vacated")
+                        && !r.getApartmentNumber().equalsIgnoreCase("Removed")
+                        && !r.getApartmentNumber().equalsIgnoreCase("PENDING")
+                        && !r.getApartmentNumber().equalsIgnoreCase("N/A"))
+                .collect(Collectors.toList());
         double totalUsage = 0.0;
         int count = 0;
 
