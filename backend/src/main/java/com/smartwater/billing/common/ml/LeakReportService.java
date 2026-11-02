@@ -273,6 +273,25 @@ public class LeakReportService {
                 Double expMin = usage.getExpectedMin();
                 Double expMax = usage.getExpectedMax();
 
+                // 1. Guard against null or 0.0 expectedMin / expectedMax
+                if (expMin == null || expMax == null || (expMin == 0.0 && expMax == 0.0)) {
+                    int people = (hhSize != null && hhSize > 0) ? hhSize : 2;
+                    int days = 30;
+                    expMin = Math.round((people * 0.10 * days) * 10.0) / 10.0;
+                    expMax = Math.round((people * 0.25 * days) * 10.0) / 10.0;
+                }
+
+                // 2. Guard against missing anomalyScore
+                if (score == 0.0) {
+                    if ("POTENTIAL_LEAK".equalsIgnoreCase(status) || (expMax != null && units > expMax)) {
+                        score = Math.min(0.99, 0.75 + Math.min(0.24, ((units - expMax) / Math.max(1.0, expMax * 2.0))));
+                    } else if (units < expMin) {
+                        score = 0.05;
+                    } else {
+                        score = 0.15;
+                    }
+                }
+
                 if ("POTENTIAL_LEAK".equalsIgnoreCase(status) || score >= 0.75) {
                     leaksDetected++;
                     highRisk++;
@@ -286,6 +305,18 @@ public class LeakReportService {
                 if (expMax != null && units > expMax) {
                     totalExcessKl += (units - expMax);
                     totalLossCost += extraCost;
+                }
+
+                String reason = usage.getAnomalyReason();
+                String pattern = usage.getAnomalyPattern();
+                if (reason == null || reason.isBlank()) {
+                    if ("POTENTIAL_LEAK".equalsIgnoreCase(status) || score >= 0.75) {
+                        reason = "High consumption (" + units + " kL) significantly exceeds expected household threshold (" + expMin + " - " + expMax + " kL). Possible fixture leak or burst pipe.";
+                        pattern = (pattern == null || pattern.isBlank()) ? "SUDDEN_SPIKE" : pattern;
+                    } else {
+                        reason = "Consumption (" + units + " kL) is within the expected normal range (" + expMin + " - " + expMax + " kL).";
+                        pattern = (pattern == null || pattern.isBlank()) ? "NORMAL" : pattern;
+                    }
                 }
 
                 String incidentStatus = null;
@@ -311,9 +342,9 @@ public class LeakReportService {
                         .expectedMax(expMax)
                         .anomalyScore(score)
                         .anomalyStatus(status)
-                        .anomalyReason(usage.getAnomalyReason())
-                        .anomalyConfidence(usage.getAnomalyConfidence())
-                        .anomalyPattern(usage.getAnomalyPattern())
+                        .anomalyReason(reason)
+                        .anomalyConfidence(usage.getAnomalyConfidence() != null ? usage.getAnomalyConfidence() : (score >= 0.75 ? "HIGH" : "MEDIUM"))
+                        .anomalyPattern(pattern)
                         .incidentId(usage.getIncidentId())
                         .incidentStatus(incidentStatus)
                         .estimatedExtraCost(extraCost)

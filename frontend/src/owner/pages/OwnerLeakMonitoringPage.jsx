@@ -157,7 +157,10 @@ export default function OwnerLeakMonitoringPage() {
       if (!matchesSearch) return false;
 
       // Risk Filter
-      const score = item.anomalyScore || 0;
+      const rawRisk = item.anomalyScore;
+      const score = rawRisk != null
+        ? (rawRisk > 0 && rawRisk <= 1.0 ? Math.round(rawRisk * 100) : Math.round(rawRisk))
+        : 0;
       if (riskFilter === 'HIGH') return score >= 70;
       if (riskFilter === 'MED') return score >= 40 && score < 70;
       if (riskFilter === 'LEAK_ONLY') return item.anomalyStatus === 'POTENTIAL_LEAK';
@@ -410,8 +413,11 @@ export default function OwnerLeakMonitoringPage() {
                       const actual = item.unitsConsumed != null ? Number(item.unitsConsumed).toFixed(2) : '0.00';
                       const min = item.expectedMin != null ? Number(item.expectedMin).toFixed(1) : '0.0';
                       const max = item.expectedMax != null ? Number(item.expectedMax).toFixed(1) : '0.0';
-                      const score = item.anomalyScore != null ? Math.round(item.anomalyScore) : 0;
                       const isLeak = item.anomalyStatus === 'POTENTIAL_LEAK';
+                      const rawRisk = item.anomalyScore;
+                      const score = rawRisk != null
+                        ? (rawRisk > 0 && rawRisk <= 1.0 ? Math.round(rawRisk * 100) : Math.round(rawRisk))
+                        : (isLeak ? 85 : 0);
 
                       return (
                         <tr key={item.usageId || item.apartmentId} className={isLeak ? 'table-danger-subtle' : ''}>

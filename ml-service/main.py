@@ -273,9 +273,15 @@ def score_leak_batch(request: LeakScoreBatchRequest):
         logger.warning(f"Schema version mismatch: received {request.schema_version}, expected {settings.schema_version}")
 
     results = p.score_batch(request.flats)
+    for r in results:
+        if not r.model_version:
+            r.model_version = p.model_version
 
+    import datetime
     return LeakScoreBatchResponse(
+        cycle_id=f"CYC-{request.billing_cycle_id}" if request.billing_cycle_id else None,
         model_version=p.model_version,
+        scored_at=datetime.datetime.utcnow().isoformat() + "Z",
         results=results
     )
 

@@ -695,13 +695,13 @@ public class BulkBillingService {
         }
 
         // 3. Persist water usage records atomically
-        usageRepository.saveAll(usageRecordsToSave);
+        usageRepository.saveAllAndFlush(usageRecordsToSave);
 
-        // 4. Trigger asynchronous ML leak detection scoring post-commit
+        // 4. Execute ML leak detection scoring synchronously so records are scored
         try {
-            leakDetectionService.scoreBillingCycleAsync(buildingId, cycleId);
+            leakDetectionService.scoreBillingCycle(buildingId, cycleId);
         } catch (Exception ex) {
-            log.warn("Could not trigger async leak detection scoring for cycle #{}: {}", cycleId, ex.getMessage());
+            log.warn("Could not score leak detection for cycle #{}: {}", cycleId, ex.getMessage());
         }
 
         log.info("Successfully imported {} water meter readings for building '{}', cycle #{}. Cycle remains OPEN.",
@@ -986,13 +986,13 @@ public class BulkBillingService {
         }
 
         // 7. Persist WaterUsage records within the transaction
-        usageRepository.saveAll(usageRecordsToSave);
+        usageRepository.saveAllAndFlush(usageRecordsToSave);
 
-        // Trigger asynchronous ML leak detection scoring post-commit
+        // Execute ML leak detection scoring synchronously so records are scored
         try {
-            leakDetectionService.scoreBillingCycleAsync(buildingId, cycleId);
+            leakDetectionService.scoreBillingCycle(buildingId, cycleId);
         } catch (Exception ex) {
-            log.warn("Could not trigger async leak detection scoring for cycle #{}: {}", cycleId, ex.getMessage());
+            log.warn("Could not score leak detection for cycle #{}: {}", cycleId, ex.getMessage());
         }
 
         // 8. Invoke BillingCycleService.finalizeCycle (joins existing @Transactional)

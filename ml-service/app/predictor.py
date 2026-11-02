@@ -8,7 +8,7 @@ import numpy as np
 
 from app.config import settings
 from app.schemas import FlatReadingInput, FlatLeakResult
-from app.features import extract_features, FEATURE_NAMES
+from app.features import extract_features, FEATURE_NAMES, extract_clean_history
 from app.fallback import compute_peer_or_rule_fallback
 from app.reasons import generate_leak_reason
 
@@ -137,6 +137,7 @@ class LeakPredictor:
         if flat.apartment_id is None:
             return FlatLeakResult(
                 usage_id=flat.usage_id,
+                apartment_id=flat.apartment_id,
                 expected_min_kl=None,
                 expected_kl=None,
                 expected_max_kl=None,
@@ -154,6 +155,7 @@ class LeakPredictor:
         if flat.meter_status and flat.meter_status.upper() == "INACTIVE":
             return FlatLeakResult(
                 usage_id=flat.usage_id,
+                apartment_id=flat.apartment_id,
                 expected_min_kl=None,
                 expected_kl=None,
                 expected_max_kl=None,
@@ -171,6 +173,7 @@ class LeakPredictor:
         if current_kl < 0:
             return FlatLeakResult(
                 usage_id=flat.usage_id,
+                apartment_id=flat.apartment_id,
                 expected_min_kl=None,
                 expected_kl=None,
                 expected_max_kl=None,
@@ -185,19 +188,27 @@ class LeakPredictor:
         # Sanity cap: > 3,000 litres per person per day (3.0 kL/person/day)
         litres_per_person_day = (daily_usage * 1000.0) / max(1.0, hh_size)
         if litres_per_person_day > settings.max_litres_per_person_day:
+            clean_hist = extract_clean_history(flat)
+            min_d, exp_d, max_d, conf, fallback_status, pattern, _ = compute_peer_or_rule_fallback(flat, clean_hist)
+            exp_min_kl = round(min_d * days, 1) if min_d is not None else round(0.10 * hh_size * days, 1)
+            exp_kl = round(exp_d * days, 1) if exp_d is not None else round(0.15 * hh_size * days, 1)
+            exp_max_kl = round(max_d * days, 1) if max_d is not None else round(0.25 * hh_size * days, 1)
+
+            reason = generate_leak_reason(
+                flat, "POTENTIAL_LEAK", "SUDDEN_SPIKE", 0.99, current_kl, exp_min_kl, exp_kl, exp_max_kl, peer_avg_kl
+            )
             return FlatLeakResult(
                 usage_id=flat.usage_id,
-                expected_min_kl=None,
-                expected_kl=None,
-                expected_max_kl=None,
+                apartment_id=flat.apartment_id,
+                expected_min_kl=exp_min_kl,
+                expected_kl=exp_kl,
+                expected_max_kl=exp_max_kl,
                 risk_score=0.99,
-                status="DATA_SUSPECT",
+                status="POTENTIAL_LEAK",
                 confidence="LOW",
                 pattern="SUDDEN_SPIKE",
                 data_quality_flag="EXTREME_OUTLIER",
-                reason=generate_leak_reason(
-                    flat, "DATA_SUSPECT", "SUDDEN_SPIKE", 0.99, current_kl, 0.0, 0.0, 0.0
-                )
+                reason=reason
             )
 
         # Extract features & clean history
@@ -238,6 +249,7 @@ class LeakPredictor:
 
             return FlatLeakResult(
                 usage_id=flat.usage_id,
+                apartment_id=flat.apartment_id,
                 expected_min_kl=exp_min_kl,
                 expected_kl=exp_kl,
                 expected_max_kl=exp_max_kl,
@@ -327,6 +339,7 @@ class LeakPredictor:
 
         return FlatLeakResult(
             usage_id=flat.usage_id,
+            apartment_id=flat.apartment_id,
             expected_min_kl=expected_min_kl,
             expected_kl=expected_kl,
             expected_max_kl=expected_max_kl,

@@ -16,6 +16,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
+import com.smartwater.billing.common.entity.BillingCycle;
+import com.smartwater.billing.common.ml.LeakDetectionService;
+import com.smartwater.billing.common.repository.BillingCycleRepository;
 
 @RestController
 @RequestMapping
@@ -24,13 +28,19 @@ public class OwnerLeakAndHouseholdController {
     private final LeakReportService leakReportService;
     private final HouseholdService householdService;
     private final LeakFeedbackService leakFeedbackService;
+    private final LeakDetectionService leakDetectionService;
+    private final BillingCycleRepository billingCycleRepository;
 
     public OwnerLeakAndHouseholdController(LeakReportService leakReportService,
                                            HouseholdService householdService,
-                                           LeakFeedbackService leakFeedbackService) {
+                                           LeakFeedbackService leakFeedbackService,
+                                           LeakDetectionService leakDetectionService,
+                                           BillingCycleRepository billingCycleRepository) {
         this.leakReportService = leakReportService;
         this.householdService = householdService;
         this.leakFeedbackService = leakFeedbackService;
+        this.leakDetectionService = leakDetectionService;
+        this.billingCycleRepository = billingCycleRepository;
     }
 
     /**
@@ -82,5 +92,32 @@ public class OwnerLeakAndHouseholdController {
             @Valid @RequestBody LeakFeedbackRequest request
     ) {
         return ResponseEntity.ok(leakFeedbackService.submitFeedback(authentication.getName(), usageId, request));
+    }
+
+    /**
+     * Owner triggers machine learning re-scoring for a building / cycle.
+     */
+    @PostMapping({"/owner/buildings/{buildingId}/leak-monitoring/rescore", "/api/owner/buildings/{buildingId}/leak-monitoring/rescore"})
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'BUILDING_OWNER')")
+    public ResponseEntity<Map<String, Object>> rescoreBuildingLeaks(
+            Authentication authentication,
+            @PathVariable("buildingId") Long buildingId,
+            @RequestParam(value = "cycleId", required = false) Long cycleId
+    ) {
+        Long targetCycleId = cycleId;
+        if (targetCycleId == null) {
+            List<BillingCycle> cycles = billingCycleRepository.findByBuildingBuildingIdOrderByStartDateDesc(buildingId);
+            if (!cycles.isEmpty()) {
+                targetCycleId = cycles.get(0).getId();
+            }
+        }
+        if (targetCycleId != null) {
+            leakDetectionService.scoreBillingCycle(buildingId, targetCycleId);
+        }
+        return ResponseEntity.ok(Map.of(
+                "success", true,
+                "message", "Cycle scoring completed successfully!",
+                "cycleId", targetCycleId != null ? targetCycleId : 0
+        ));
     }
 }
