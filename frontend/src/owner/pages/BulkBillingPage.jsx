@@ -65,6 +65,10 @@ export default function BulkBillingPage() {
 
   // 3. Fetch readiness metrics when cycle changes
   useEffect(() => {
+    setValidationResult(null);
+    setSelectedFile(null);
+    setErrorBanner('');
+
     if (!selectedBuildingId || !selectedCycleId) {
       setReadiness(null);
       return;
@@ -207,6 +211,10 @@ export default function BulkBillingPage() {
       );
 
       setGenerationResult(response.data);
+      setValidationResult(null);
+      setSelectedFile(null);
+      setShowConfirmModal(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
 
       // Refresh readiness metrics to update cycle status in UI
       API.get(`/bulk-billing/readiness?buildingId=${selectedBuildingId}&billingCycleId=${selectedCycleId}`)
@@ -268,6 +276,71 @@ export default function BulkBillingPage() {
           </div>
         </div>
       </div>
+
+      {/* Finalized Cycle Banner for already finalized cycle */}
+      {selectedCycle?.status === 'FINALIZED' && !generationResult && (
+        <div className="card border-0 shadow-sm p-4 mb-4 bg-white rounded-4 border-start border-success border-4">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+            <div className="d-flex align-items-center gap-3">
+              <div className="bg-success text-white rounded-circle p-2 d-flex align-items-center justify-content-center" style={{ width: 44, height: 44 }}>
+                <i className="bi bi-check-lg fs-4"></i>
+              </div>
+              <div>
+                <div className="d-flex align-items-center gap-2">
+                  <h4 className="fw-bold text-dark mb-0">Billing Cycle #{selectedCycle.id} is Finalized</h4>
+                  <span className="badge bg-success bg-opacity-10 text-success border border-success-subtle px-2.5 py-1 fs-8 fw-semibold rounded-pill">
+                    COMPLETED &amp; LOCKED
+                  </span>
+                </div>
+                <p className="text-muted small mb-0 mt-1">
+                  Bills and invoices for period <strong>{selectedCycle.startDate} to {selectedCycle.endDate}</strong> have been finalized and issued to residents.
+                </p>
+              </div>
+            </div>
+            <div className="d-flex gap-2 flex-wrap">
+              <a href="/owner/invoices" className="btn btn-success px-4 py-2 fw-semibold shadow-sm">
+                <i className="bi bi-receipt me-1"></i> View Generated Invoices
+              </a>
+              <a href="/owner/billing" className="btn btn-outline-primary px-3.5 py-2 fw-semibold">
+                <i className="bi bi-file-earmark-text me-1"></i> Monthly Bills
+              </a>
+            </div>
+          </div>
+
+          {readiness && (
+            <div className="row g-3 mt-1">
+              <div className="col-sm-6 col-lg-3">
+                <div className="bg-light p-3 rounded-3 border">
+                  <div className="text-muted small text-uppercase fw-semibold">Residents Billed</div>
+                  <div className="fs-3 fw-bold text-dark">{readiness.eligibleResidentsCount}</div>
+                  <small className="text-success fw-semibold"><i className="bi bi-check-circle-fill me-1"></i>100% Coverage</small>
+                </div>
+              </div>
+              <div className="col-sm-6 col-lg-3">
+                <div className="bg-light p-3 rounded-3 border">
+                  <div className="text-muted small text-uppercase fw-semibold">Meter Readings</div>
+                  <div className="fs-3 fw-bold text-primary">{readiness.recordedReadingsCount}</div>
+                  <small className="text-muted">Logged in database</small>
+                </div>
+              </div>
+              <div className="col-sm-6 col-lg-3">
+                <div className="bg-light p-3 rounded-3 border">
+                  <div className="text-muted small text-uppercase fw-semibold">Invoices Created</div>
+                  <div className="fs-3 fw-bold text-success">{readiness.existingBillsCount}</div>
+                  <small className="text-muted">Issued to tenants</small>
+                </div>
+              </div>
+              <div className="col-sm-6 col-lg-3">
+                <div className="bg-light p-3 rounded-3 border">
+                  <div className="text-muted small text-uppercase fw-semibold">Cycle Status</div>
+                  <div className="fs-3 fw-bold text-secondary">FINALIZED</div>
+                  <small className="text-danger fw-semibold"><i className="bi bi-lock-fill me-1"></i>Locked Against Drift</small>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {generationResult && (
         <div className="card border-0 shadow-sm p-4 mb-4 bg-success bg-opacity-10 rounded-4 border-start border-success border-4">
@@ -366,6 +439,8 @@ export default function BulkBillingPage() {
                 setSelectedCycleId(e.target.value);
                 setValidationResult(null);
                 setSelectedFile(null);
+                setGenerationResult(null);
+                setErrorBanner('');
               }}
               disabled={cycles.length === 0}
             >
@@ -505,34 +580,42 @@ export default function BulkBillingPage() {
                 </div>
               </div>
 
-              <div className="d-flex align-items-center justify-content-between mt-auto gap-3 flex-wrap">
-                <span className="badge bg-light text-muted border px-3 py-2 fs-8 fw-semibold">
-                  <i className="bi bi-shield-check me-1 text-success"></i> Safe Dry-Run (No Bills Created)
-                </span>
+              {!isCycleOpen ? (
+                <div className="alert alert-secondary py-3 px-3 mt-auto mb-0 rounded-3 text-center">
+                  <i className="bi bi-lock-fill fs-4 text-secondary d-block mb-1"></i>
+                  <div className="fw-semibold text-dark small">Billing Cycle Finalized &amp; Locked</div>
+                  <div className="text-muted fs-8">Bills and invoices have already been issued for this cycle. Switch to an OPEN cycle to upload new readings.</div>
+                </div>
+              ) : (
+                <div className="d-flex align-items-center justify-content-between mt-auto gap-3 flex-wrap">
+                  <span className="badge bg-light text-muted border px-3 py-2 fs-8 fw-semibold">
+                    <i className="bi bi-shield-check me-1 text-success"></i> Safe Dry-Run (No Bills Created)
+                  </span>
 
-                <button
-                  type="submit"
-                  className="btn btn-primary px-4 py-2.5 fw-semibold d-flex align-items-center gap-2"
-                  disabled={validating || !selectedFile || !isCycleOpen}
-                >
-                  {validating ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm" role="status"></span> Validating Readings...
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-check2-circle fs-5"></i> Run Pre-Flight Validation
-                    </>
-                  )}
-                </button>
-              </div>
+                  <button
+                    type="submit"
+                    className="btn btn-primary px-4 py-2.5 fw-semibold d-flex align-items-center gap-2"
+                    disabled={validating || !selectedFile || !isCycleOpen}
+                  >
+                    {validating ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm" role="status"></span> Validating Readings...
+                      </>
+                    ) : (
+                      <>
+                        <i className="bi bi-check2-circle fs-5"></i> Run Pre-Flight Validation
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
             </form>
           </div>
         </div>
       </div>
 
       {/* Step 4: Validation Preview & Results Card */}
-      {validationResult && (
+      {validationResult && isCycleOpen && (
         <div className="card border-0 shadow-sm p-4 bg-white rounded-4 mb-4">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 pb-3 border-bottom mb-4">
             <div>
