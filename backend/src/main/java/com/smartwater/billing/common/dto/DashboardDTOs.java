@@ -67,6 +67,7 @@ public class DashboardDTOs {
         private long totalBuildings;
         private long totalResidents;
         private long pendingInvitations;
+        private long pendingRequests;
         private long totalBillsGenerated;
         private double totalRevenue;
         private double totalUnitsConsumed;
@@ -76,6 +77,17 @@ public class DashboardDTOs {
             this.totalBuildings = totalBuildings;
             this.totalResidents = totalResidents;
             this.pendingInvitations = pendingInvitations;
+            this.pendingRequests = pendingInvitations;
+            this.totalBillsGenerated = totalBillsGenerated;
+            this.totalRevenue = totalRevenue;
+            this.totalUnitsConsumed = totalUnitsConsumed;
+        }
+
+        public OwnerDashboardStats(long totalBuildings, long totalResidents, long pendingInvitations, long pendingRequests, long totalBillsGenerated, double totalRevenue, double totalUnitsConsumed) {
+            this.totalBuildings = totalBuildings;
+            this.totalResidents = totalResidents;
+            this.pendingInvitations = pendingInvitations;
+            this.pendingRequests = pendingRequests;
             this.totalBillsGenerated = totalBillsGenerated;
             this.totalRevenue = totalRevenue;
             this.totalUnitsConsumed = totalUnitsConsumed;
@@ -89,6 +101,9 @@ public class DashboardDTOs {
 
         public long getPendingInvitations() { return pendingInvitations; }
         public void setPendingInvitations(long pendingInvitations) { this.pendingInvitations = pendingInvitations; }
+
+        public long getPendingRequests() { return pendingRequests; }
+        public void setPendingRequests(long pendingRequests) { this.pendingRequests = pendingRequests; }
 
         public long getTotalBillsGenerated() { return totalBillsGenerated; }
         public void setTotalBillsGenerated(long totalBillsGenerated) { this.totalBillsGenerated = totalBillsGenerated; }
@@ -105,6 +120,7 @@ public class DashboardDTOs {
             private long totalBuildings;
             private long totalResidents;
             private long pendingInvitations;
+            private long pendingRequests;
             private long totalBillsGenerated;
             private double totalRevenue;
             private double totalUnitsConsumed;
@@ -112,12 +128,13 @@ public class DashboardDTOs {
             public Builder totalBuildings(long totalBuildings) { this.totalBuildings = totalBuildings; return this; }
             public Builder totalResidents(long totalResidents) { this.totalResidents = totalResidents; return this; }
             public Builder pendingInvitations(long pendingInvitations) { this.pendingInvitations = pendingInvitations; return this; }
+            public Builder pendingRequests(long pendingRequests) { this.pendingRequests = pendingRequests; return this; }
             public Builder totalBillsGenerated(long totalBillsGenerated) { this.totalBillsGenerated = totalBillsGenerated; return this; }
             public Builder totalRevenue(double totalRevenue) { this.totalRevenue = totalRevenue; return this; }
             public Builder totalUnitsConsumed(double totalUnitsConsumed) { this.totalUnitsConsumed = totalUnitsConsumed; return this; }
 
             public OwnerDashboardStats build() {
-                return new OwnerDashboardStats(totalBuildings, totalResidents, pendingInvitations, totalBillsGenerated, totalRevenue, totalUnitsConsumed);
+                return new OwnerDashboardStats(totalBuildings, totalResidents, pendingInvitations, pendingRequests, totalBillsGenerated, totalRevenue, totalUnitsConsumed);
             }
         }
     }

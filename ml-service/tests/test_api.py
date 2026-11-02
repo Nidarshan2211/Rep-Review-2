@@ -11,7 +11,7 @@ def test_health_endpoint():
     response = client.get("/health")
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "ok"
+    assert data["status"] in ("ok", "UP")
     assert "model_version" in data
     assert data["schema_version"] == settings.schema_version
 

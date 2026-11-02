@@ -71,6 +71,7 @@ public class SecurityConfig {
                                 "/owners/**",
                                 "/owner/**",
                                 "/api/owner/**",
+                                "/api/owners/**",
                                 "/residents/invite",
                                 "/api/residents/invite",
                                 "/api/residents/invitations/*/resend",

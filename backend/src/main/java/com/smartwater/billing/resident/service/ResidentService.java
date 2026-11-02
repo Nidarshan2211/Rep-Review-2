@@ -13,6 +13,9 @@ import com.smartwater.billing.owner.service.BuildingOwnerService;
 import com.smartwater.billing.common.repository.*;
 import com.smartwater.billing.owner.repository.*;
 import com.smartwater.billing.resident.repository.*;
+import com.smartwater.billing.resident.entity.ResidentHistory;
+import com.smartwater.billing.resident.repository.ResidentHistoryRepository;
+
 import com.smartwater.billing.common.service.EmailService;
 import com.smartwater.billing.common.util.TokenGenerator;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +36,8 @@ import java.util.stream.Collectors;
 @Service
 public class ResidentService {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ResidentService.class);
+
     @PersistenceContext
     private EntityManager entityManager;
 
@@ -50,6 +55,7 @@ public class ResidentService {
     private final ApartmentOccupancyRepository occupancyRepository;
     private final OccupancyRequestRepository occupancyRequestRepository;
     private final BillingCycleRepository billingCycleRepository;
+    private final ResidentHistoryRepository residentHistoryRepository;
 
     public ResidentService(
             ResidentRepository residentRepository,
@@ -65,7 +71,8 @@ public class ResidentService {
             ApartmentRepository apartmentRepository,
             ApartmentOccupancyRepository occupancyRepository,
             OccupancyRequestRepository occupancyRequestRepository,
-            BillingCycleRepository billingCycleRepository
+            BillingCycleRepository billingCycleRepository,
+            ResidentHistoryRepository residentHistoryRepository
     ) {
         this.residentRepository = residentRepository;
         this.invitationRepository = invitationRepository;
@@ -81,6 +88,7 @@ public class ResidentService {
         this.occupancyRepository = occupancyRepository;
         this.occupancyRequestRepository = occupancyRequestRepository;
         this.billingCycleRepository = billingCycleRepository;
+        this.residentHistoryRepository = residentHistoryRepository;
     }
 
     @Value("${resident.invitation.expiration-hours:24}")
@@ -393,60 +401,105 @@ public class ResidentService {
         Resident resident = residentRepository.findById(residentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Resident not found with id: " + residentId));
 
-        if (!resident.getBuilding().getOwner().getOwnerId().equals(owner.getOwnerId())) {
-            throw new BadRequestException("Unauthorized access to resident!");
-        }
-
-        // Audit log in resident_history
-        try {
-            BuildingOwner bOwner = resident.getBuilding() != null ? resident.getBuilding().getOwner() : null;
-            if (bOwner != null) {
-                entityManager.createNativeQuery(
-                        "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
-                        "VALUES (:oId, :bId, :bName, null, :aptName, :room, :resId, :resName, :resEmail, :resPhone, 'LEFT', :details, :actor, NOW())"
-                )
-                .setParameter("oId", bOwner.getOwnerId())
-                .setParameter("bId", resident.getBuilding() != null ? resident.getBuilding().getBuildingId() : null)
-                .setParameter("bName", resident.getBuilding() != null ? resident.getBuilding().getBuildingName() : "")
-                .setParameter("aptName", "Flat " + resident.getApartmentNumber())
-                .setParameter("room", resident.getApartmentNumber())
-                .setParameter("resId", resident.getResidentId())
-                .setParameter("resName", resident.getName())
-                .setParameter("resEmail", resident.getEmail())
-                .setParameter("resPhone", resident.getPhone())
-                .setParameter("details", "Resident removed by building owner")
-                .setParameter("actor", owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
-                .executeUpdate();
+        if (resident.getBuilding() != null && resident.getBuilding().getOwner() != null) {
+            if (!resident.getBuilding().getOwner().getOwnerId().equals(owner.getOwnerId())) {
+                throw new BadRequestException("Unauthorized access to resident!");
             }
-        } catch (Exception ignored) {}
-
-        // End active occupancy if any
-        Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findFirstByResidentResidentIdAndStatus(residentId, ApartmentOccupancy.OccupancyStatus.ACTIVE);
-        if (activeOcc.isPresent()) {
-            ApartmentOccupancy occ = activeOcc.get();
-            occ.setStatus(ApartmentOccupancy.OccupancyStatus.ENDED);
-            occ.setEndDate(LocalDateTime.now());
-            occ.setMoveOutReason("Resident removed by building owner");
-            occupancyRepository.save(occ);
         }
 
-        // Detach water meter
-        WaterMeter meter = meterRepository.findByResidentResidentId(residentId).orElse(null);
-        if (meter != null) {
-            meter.setResident(null);
-            meterRepository.save(meter);
+        // Audit log in resident_history using JPA entity
+        try {
+            com.smartwater.billing.owner.entity.Building bldg = resident.getBuilding();
+            String bldgName = bldg != null ? bldg.getBuildingName() : "N/A";
+            String aptNum = resident.getApartmentNumber() != null ? resident.getApartmentNumber() : "N/A";
+            String resName = resident.getName() != null ? resident.getName() : "Resident";
+
+            residentHistoryRepository.save(ResidentHistory.builder()
+                    .ownerId(owner.getOwnerId())
+                    .buildingId(bldg != null ? bldg.getBuildingId() : null)
+                    .buildingName(bldgName)
+                    .apartmentId(null)
+                    .apartmentName("Flat " + aptNum)
+                    .roomNumber(aptNum)
+                    .residentId(resident.getResidentId())
+                    .residentName(resName)
+                    .residentEmail(resident.getEmail())
+                    .residentPhone(resident.getPhone())
+                    .activityType("LEFT")
+                    .details("Resident removed by building owner")
+                    .actor(owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
+                    .timestamp(LocalDateTime.now())
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to record resident history audit in deleteResident: {}", e.getMessage());
         }
 
-        // Clean up requests submitted by this resident
-        List<OccupancyRequest> reqs = occupancyRequestRepository.findAllByResidentId(residentId);
-        if (!reqs.isEmpty()) {
-            occupancyRequestRepository.deleteAll(reqs);
-        }
+        try {
+            entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 0").executeUpdate();
 
-        // Mark resident as removed and preserve historical tenancy and billing records
-        resident.setAccountStatus(Resident.AccountStatus.INACTIVE);
-        resident.setApartmentNumber("Removed");
-        residentRepository.save(resident);
+            // 1. Water usage predictions
+            entityManager.createNativeQuery("DELETE FROM water_usage_predictions WHERE resident_id = :resId")
+                    .setParameter("resId", residentId).executeUpdate();
+
+            // 2. Payments for bills of this resident
+            entityManager.createNativeQuery(
+                    "DELETE FROM payments WHERE bill_id IN (SELECT b.bill_id FROM (SELECT bill_id FROM bills WHERE resident_id = :resId) b)"
+            ).setParameter("resId", residentId).executeUpdate();
+
+            // 3. Invoices
+            entityManager.createNativeQuery("DELETE FROM invoices WHERE resident_id = :resId")
+                    .setParameter("resId", residentId).executeUpdate();
+
+            // 4. Bills
+            entityManager.createNativeQuery("DELETE FROM bills WHERE resident_id = :resId")
+                    .setParameter("resId", residentId).executeUpdate();
+
+            // 5. Notifications
+            entityManager.createNativeQuery("DELETE FROM notifications WHERE resident_id = :resId")
+                    .setParameter("resId", residentId).executeUpdate();
+
+            // 6. Occupancy requests
+            entityManager.createNativeQuery("DELETE FROM occupancy_requests WHERE resident_id = :resId")
+                    .setParameter("resId", residentId).executeUpdate();
+
+            // 7. Away periods & household size history
+            entityManager.createNativeQuery(
+                    "DELETE FROM away_periods WHERE occupancy_id IN (SELECT o.occupancy_id FROM (SELECT occupancy_id FROM apartment_occupancies WHERE resident_id = :resId) o)"
+            ).setParameter("resId", residentId).executeUpdate();
+
+            entityManager.createNativeQuery(
+                    "DELETE FROM household_size_history WHERE occupancy_id IN (SELECT o.occupancy_id FROM (SELECT occupancy_id FROM apartment_occupancies WHERE resident_id = :resId) o)"
+            ).setParameter("resId", residentId).executeUpdate();
+
+            // 8. Apartment occupancies
+            entityManager.createNativeQuery("DELETE FROM apartment_occupancies WHERE resident_id = :resId")
+                    .setParameter("resId", residentId).executeUpdate();
+
+            // 9. Resident invitations
+            entityManager.createNativeQuery("DELETE FROM resident_invitations WHERE resident_id = :resId")
+                    .setParameter("resId", residentId).executeUpdate();
+
+            // 10. Water meters: unlink resident
+            entityManager.createNativeQuery("UPDATE water_meters SET resident_id = NULL WHERE resident_id = :resId")
+                    .setParameter("resId", residentId).executeUpdate();
+
+            // 11. Delete from residents table
+            Long userId = resident.getUser() != null ? resident.getUser().getUserId() : null;
+            entityManager.createNativeQuery("DELETE FROM residents WHERE resident_id = :resId")
+                    .setParameter("resId", residentId).executeUpdate();
+
+            // 12. Delete user account if any and role is RESIDENT
+            if (userId != null) {
+                entityManager.createNativeQuery("UPDATE household_size_history SET changed_by_user_id = NULL WHERE changed_by_user_id = :uid")
+                        .setParameter("uid", userId).executeUpdate();
+                entityManager.createNativeQuery("DELETE FROM leak_feedback WHERE submitted_by_user_id = :uid")
+                        .setParameter("uid", userId).executeUpdate();
+                entityManager.createNativeQuery("DELETE FROM users WHERE user_id = :uid AND role = 'RESIDENT'")
+                        .setParameter("uid", userId).executeUpdate();
+            }
+        } finally {
+            entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 1").executeUpdate();
+        }
     }
 
     @Transactional
@@ -459,28 +512,31 @@ public class ResidentService {
             throw new BadRequestException("Unauthorized access to resident!");
         }
 
-        // Audit log in resident_history
+        // Audit log in resident_history using JPA entity
         try {
-            BuildingOwner bOwner = resident.getBuilding() != null ? resident.getBuilding().getOwner() : null;
+            com.smartwater.billing.owner.entity.Building bldg = resident.getBuilding();
+            BuildingOwner bOwner = bldg != null ? bldg.getOwner() : null;
             if (bOwner != null) {
-                entityManager.createNativeQuery(
-                        "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
-                        "VALUES (:oId, :bId, :bName, null, :aptName, :room, :resId, :resName, :resEmail, :resPhone, 'LEFT', :details, :actor, NOW())"
-                )
-                .setParameter("oId", bOwner.getOwnerId())
-                .setParameter("bId", resident.getBuilding() != null ? resident.getBuilding().getBuildingId() : null)
-                .setParameter("bName", resident.getBuilding() != null ? resident.getBuilding().getBuildingName() : "")
-                .setParameter("aptName", "Flat " + resident.getApartmentNumber())
-                .setParameter("room", resident.getApartmentNumber())
-                .setParameter("resId", resident.getResidentId())
-                .setParameter("resName", resident.getName())
-                .setParameter("resEmail", resident.getEmail())
-                .setParameter("resPhone", resident.getPhone())
-                .setParameter("details", "Resident vacated by building owner")
-                .setParameter("actor", owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
-                .executeUpdate();
+                residentHistoryRepository.save(ResidentHistory.builder()
+                        .ownerId(bOwner.getOwnerId())
+                        .buildingId(bldg.getBuildingId())
+                        .buildingName(bldg.getBuildingName())
+                        .apartmentId(null)
+                        .apartmentName("Flat " + resident.getApartmentNumber())
+                        .roomNumber(resident.getApartmentNumber())
+                        .residentId(resident.getResidentId())
+                        .residentName(resident.getName() != null ? resident.getName() : "Resident")
+                        .residentEmail(resident.getEmail())
+                        .residentPhone(resident.getPhone())
+                        .activityType("LEFT")
+                        .details("Resident vacated by building owner")
+                        .actor(owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
+                        .timestamp(LocalDateTime.now())
+                        .build());
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.warn("Failed to record resident history audit in vacate: {}", e.getMessage());
+        }
 
         // End active occupancy
         Optional<ApartmentOccupancy> activeOcc = occupancyRepository.findFirstByResidentResidentIdAndStatus(residentId, ApartmentOccupancy.OccupancyStatus.ACTIVE);

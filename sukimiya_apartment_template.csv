@@ -1,5 +1,0 @@
-resident_id,apartment_number,resident_name,meter_id,meter_number,previous_reading,current_reading
-9,102,Nidarshan V,9,WM-SUK-01-102,0.00,
-6,302,Karthik Raja,6,WM-SUK-302,95.00,
-7,405,Deepa Verma,7,WM-SUK-405,190.20,
-8,501,Ramesh Patel,8,WM-SUK-501,146.10,

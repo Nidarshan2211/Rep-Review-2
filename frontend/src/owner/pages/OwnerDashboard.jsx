@@ -17,16 +17,26 @@ export default function OwnerDashboard() {
 
   if (loading) return <LoadingSpinner text="Loading Owner Dashboard..." />;
 
+  const pendingCount = (stats?.pendingRequests !== undefined && stats?.pendingRequests !== null)
+    ? stats.pendingRequests
+    : (stats?.pendingInvitations || 0);
+
   return (
     <div className="container-fluid py-4">
+      {/* Header */}
       <div className="d-flex align-items-center justify-content-between mb-4 flex-wrap gap-3">
         <div>
           <h2 className="fw-bold mb-1 text-dark">Building Owner Dashboard</h2>
           <p className="text-muted small mb-0">Property overview, water usage stats, and revenue tracking</p>
         </div>
         <div className="d-flex gap-2">
-          <Link to="/owner/residents" className="btn btn-dark fw-bold">
+          <Link to="/owner/residents" className="btn btn-dark fw-bold position-relative">
             <i className="bi bi-person-plus-fill me-1.5"></i> Manage Residents
+            {pendingCount > 0 && (
+              <span className="badge bg-danger rounded-pill ms-2">
+                {pendingCount}
+              </span>
+            )}
           </Link>
           <Link to="/owner/billing" className="btn btn-outline-secondary fw-bold bg-white">
             <i className="bi bi-receipt me-1.5"></i> Billing Control
@@ -37,6 +47,22 @@ export default function OwnerDashboard() {
         </div>
       </div>
 
+      {/* Actionable Alert Banner for Pending Requests */}
+      {pendingCount > 0 && (
+        <div className="alert alert-warning border-warning-subtle shadow-sm rounded-4 d-flex align-items-center justify-content-between mb-4 py-2.5 px-3.5">
+          <div className="d-flex align-items-center gap-2.5">
+            <i className="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+            <div>
+              <strong>{pendingCount} Pending Onboarding Request{pendingCount > 1 ? 's' : ''}:</strong> Resident applicants are waiting for your approval.
+            </div>
+          </div>
+          <Link to="/owner/residents" className="btn btn-sm btn-dark rounded-pill px-3 py-1 fw-bold">
+            Review Now <i className="bi bi-arrow-right ms-1"></i>
+          </Link>
+        </div>
+      )}
+
+      {/* Stat Cards */}
       <div className="row g-3 mb-4">
         <div className="col-md-6 col-lg-3">
           <StatCard title="Buildings Managed" value={stats?.totalBuildings || 0} icon="bi-building" />
@@ -45,7 +71,14 @@ export default function OwnerDashboard() {
           <StatCard title="Total Residents" value={stats?.totalResidents || 0} icon="bi-people" />
         </div>
         <div className="col-md-6 col-lg-3">
-          <StatCard title="Pending Invitations" value={stats?.pendingInvitations || 0} icon="bi-envelope-exclamation" />
+          <Link to="/owner/residents" className="text-decoration-none d-block h-100">
+            <StatCard
+              title="Pending Requests"
+              value={pendingCount}
+              subtext={pendingCount > 0 ? "Review in Residents →" : "All requests reviewed"}
+              icon="bi-envelope-exclamation"
+            />
+          </Link>
         </div>
         <div className="col-md-6 col-lg-3">
           <StatCard title="Total Revenue" value={`₹${(stats?.totalRevenue || 0).toFixed(2)}`} icon="bi-cash-stack" />

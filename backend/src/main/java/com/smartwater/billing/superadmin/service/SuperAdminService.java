@@ -12,6 +12,10 @@ import com.smartwater.billing.resident.repository.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
+import com.smartwater.billing.owner.entity.OwnerHistory;
+import com.smartwater.billing.owner.repository.OwnerHistoryRepository;
+import java.time.LocalDateTime;
+
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -27,6 +31,7 @@ public class SuperAdminService {
     private final BillRepository billRepository;
     private final UserRepository userRepository;
     private final BuildingOwnerService buildingOwnerService;
+    private final OwnerHistoryRepository ownerHistoryRepository;
 
     @PersistenceContext
     private EntityManager entityManager;
@@ -37,7 +42,8 @@ public class SuperAdminService {
             ResidentRepository residentRepository,
             BillRepository billRepository,
             UserRepository userRepository,
-            BuildingOwnerService buildingOwnerService
+            BuildingOwnerService buildingOwnerService,
+            OwnerHistoryRepository ownerHistoryRepository
     ) {
         this.ownerRepository = ownerRepository;
         this.buildingRepository = buildingRepository;
@@ -45,6 +51,7 @@ public class SuperAdminService {
         this.billRepository = billRepository;
         this.userRepository = userRepository;
         this.buildingOwnerService = buildingOwnerService;
+        this.ownerHistoryRepository = ownerHistoryRepository;
     }
 
     public AdminDashboardStats getDashboardStats() {
@@ -122,38 +129,50 @@ public class SuperAdminService {
         String email = owner.getUser() != null ? owner.getUser().getEmail() : "N/A";
         String phone = owner.getPhone() != null ? owner.getPhone() : "";
         try {
-            entityManager.createNativeQuery(
-                    "INSERT INTO owner_history (owner_id, owner_name, email, phone, event_type, details, actor, timestamp) " +
-                    "VALUES (:ownerId, :name, :email, :phone, 'REMOVED', 'Building owner removed from platform by Super Admin.', 'System Super Admin', NOW())"
-            ).setParameter("ownerId", ownerId)
-             .setParameter("name", owner.getName())
-             .setParameter("email", email)
-             .setParameter("phone", phone)
-             .executeUpdate();
+            ownerHistoryRepository.save(OwnerHistory.builder()
+                    .ownerId(ownerId)
+                    .ownerName(owner.getName())
+                    .email(email)
+                    .phone(phone)
+                    .eventType("REMOVED")
+                    .details("Building owner removed from platform by Super Admin.")
+                    .actor("System Super Admin")
+                    .timestamp(LocalDateTime.now())
+                    .build());
         } catch (Exception ignored) {}
 
-        // 2. Cascade delete all buildings owned by this owner
-        List<Building> buildings = buildingRepository.findByOwner(owner);
-        for (Building b : buildings) {
-            buildingOwnerService.deleteBuilding("admin@smartwater.com", b.getBuildingId());
-        }
+        try {
+            entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 0").executeUpdate();
 
-        // 3. Delete resident invitations issued by this owner
-        entityManager.createNativeQuery("DELETE FROM resident_invitations WHERE invited_by_id = :ownerId")
-                .setParameter("ownerId", ownerId)
-                .executeUpdate();
+            // 2. Cascade delete all buildings owned by this owner
+            List<Building> buildings = buildingRepository.findByOwner(owner);
+            for (Building b : buildings) {
+                buildingOwnerService.deleteBuildingCascade(b.getBuildingId());
+            }
 
-        // 4. Delete building owner profile
-        Long userId = owner.getUser() != null ? owner.getUser().getUserId() : null;
-        entityManager.createNativeQuery("DELETE FROM building_owners WHERE owner_id = :ownerId")
-                .setParameter("ownerId", ownerId)
-                .executeUpdate();
-
-        // 5. Delete user account if not super admin
-        if (userId != null) {
-            entityManager.createNativeQuery("DELETE FROM users WHERE user_id = :userId AND role != 'SUPER_ADMIN'")
-                    .setParameter("userId", userId)
+            // 3. Delete resident invitations issued by this owner
+            entityManager.createNativeQuery("DELETE FROM resident_invitations WHERE invited_by_id = :ownerId")
+                    .setParameter("ownerId", ownerId)
                     .executeUpdate();
+
+            // 4. Delete building owner profile
+            Long userId = owner.getUser() != null ? owner.getUser().getUserId() : null;
+            entityManager.createNativeQuery("DELETE FROM building_owners WHERE owner_id = :ownerId")
+                    .setParameter("ownerId", ownerId)
+                    .executeUpdate();
+
+            // 5. Delete user account if not super admin
+            if (userId != null) {
+                entityManager.createNativeQuery("UPDATE household_size_history SET changed_by_user_id = NULL WHERE changed_by_user_id = :uid")
+                        .setParameter("uid", userId).executeUpdate();
+                entityManager.createNativeQuery("DELETE FROM leak_feedback WHERE submitted_by_user_id = :uid")
+                        .setParameter("uid", userId).executeUpdate();
+                entityManager.createNativeQuery("DELETE FROM users WHERE user_id = :userId AND role != 'SUPER_ADMIN'")
+                        .setParameter("userId", userId)
+                        .executeUpdate();
+            }
+        } finally {
+            entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 1").executeUpdate();
         }
     }
 
@@ -181,28 +200,16 @@ public class SuperAdminService {
 
         // 2. Removed / Left Building Owners from owner_history table
         try {
-            List<Object[]> rows = entityManager.createNativeQuery(
-                    "SELECT id, owner_id, owner_name, email, phone, event_type, details, actor, timestamp FROM owner_history ORDER BY timestamp DESC"
-            ).getResultList();
-
-            for (Object[] r : rows) {
-                Long id = ((Number) r[0]).longValue();
-                String ownerName = (String) r[2];
-                String email = (String) r[3];
-                String phone = (String) r[4];
-                String eventType = (String) r[5];
-                String details = (String) r[6];
-                String actor = (String) r[7];
-                String ts = r[8] != null ? r[8].toString() : "2026-10-14T00:00:00";
-
+            List<OwnerHistory> histories = ownerHistoryRepository.findAllByOrderByTimestampDesc();
+            for (OwnerHistory h : histories) {
                 items.add(new SystemHistoryItemDTO(
-                        "HIST-" + id,
-                        eventType != null ? eventType : "REMOVED",
-                        "Building Owner Removed: " + ownerName,
-                        details != null ? details : "Building owner removed from platform. Contact: " + email + " / " + phone,
-                        ts,
+                        "HIST-" + h.getId(),
+                        h.getEventType() != null ? h.getEventType() : "REMOVED",
+                        "Building Owner Removed: " + h.getOwnerName(),
+                        h.getDetails() != null ? h.getDetails() : "Building owner removed from platform. Contact: " + h.getEmail() + " / " + h.getPhone(),
+                        h.getTimestamp() != null ? h.getTimestamp().toString() : "2026-10-14T00:00:00",
                         "REMOVED",
-                        actor != null ? actor : "System Super Admin"
+                        h.getActor() != null ? h.getActor() : "System Super Admin"
                 ));
             }
         } catch (Exception ignored) {}

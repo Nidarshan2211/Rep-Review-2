@@ -107,11 +107,7 @@ export default function ProfilePage() {
     setLeavingApp(true);
     setMessage(null);
     try {
-      try {
-        await API.delete('/owners/leave');
-      } catch (e) {
-        await API.delete('/owner/leave');
-      }
+      await API.delete('/owners/leave');
       setShowLeaveModal(false);
       logout();
       navigate('/login');

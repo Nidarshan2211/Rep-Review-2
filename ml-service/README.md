@@ -1,96 +1,110 @@
-# AquaFlow ML Leak Detection Service
+# 🌊 AquaFlow & AquaTrack Unified ML Microservice
 
-The **AquaFlow ML Leak Detection Service** is an intelligent, privacy-preserving microservice built with FastAPI, LightGBM, and Scikit-Learn to detect residential water leaks per flat.
-
----
-
-## 1. Architecture & Design Principles
-
-- **Separation of Concerns**: The ML service is a dedicated Python service. It **never** connects directly to MySQL. All consumption records, peer metrics, and household metadata are transmitted over a secure REST contract.
-- **Fail-Safe & Non-Blocking**: If the ML service is down, slow, or disabled (`ml.enabled=false`), the backend seamlessly falls back to the statistical mean + 2*SD rule. Water billing and meter reading imports **never** fail.
-- **Privacy by Design**: No resident names, emails, phone numbers, or PII are ever received or stored by the ML service. Only internal identifiers (`apartment_id`, `usage_id`), numeric household counts, and consumption series are processed.
-- **Quantile Regression (LightGBM)**: Learns flat-level personalized consumption dynamics for 10th (q10), 50th (q50), and 95th (q95) percentiles. Risk scores are squashed via logistic functions to produce smooth [0.0, 1.0] confidence-calibrated assessments.
+An enterprise-grade, privacy-preserving Machine Learning microservice built with **FastAPI**, **Scikit-Learn**, and **LightGBM** to power intelligent water consumption analytics for multi-unit apartment complexes.
 
 ---
 
-## 2. Quick Start
-
-### 2.1 Requirements
-- Python 3.10+ (Recommended: Python 3.12)
-- Dependencies listed in `requirements.txt`
-
-### 2.2 Setup Virtual Environment
-```bash
-# Windows
-py -3.12 -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-
-# Linux / macOS
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 2.3 Configuration
-Copy `.env.example` to `.env`:
-```bash
-cp .env.example .env
-```
-Ensure `ML_API_KEY` matches the backend's configured key (`ML_API_KEY` in environment or Spring `application.yml`).
+## 📖 Quick Links
+- **Presentation Guide & Cheat Sheet**: [`ML_PRESENTATION_GUIDE.md`](ML_PRESENTATION_GUIDE.md) *(Includes 30s pitch, file-by-file walkthrough, and top 10 viva Q&As)*
+- **Interactive OpenAPI / Swagger Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+- **Live Health Diagnostics**: [http://localhost:8000/health](http://localhost:8000/health)
 
 ---
 
-## 3. Training & Evaluation Pipeline
+## 🧠 Two Production ML Engines
 
-### 3.1 Generate Synthetic Dataset
-Generates 16 flats across 18 billing cycles with mixed unit types, household sizes, vacations, move-ins, and injected leak patterns:
-```bash
-python -m training.generate_synthetic_data
+| ML Engine | Model Algorithm | Target / Output | Rest Endpoint |
+| :--- | :--- | :--- | :--- |
+| **1. Consumption Forecaster** | **Random Forest Regressor** (`sklearn`) | Predicts next month's consumption in litres ($R^2 = 0.8433$) | `POST /predict` |
+| **2. Multi-Flat Leak Detector** | **Quantile Gradient Boosting** (`LightGBM`) | Predicts $q_{10}, q_{50}, q_{95}$ bounds, risk score, and diagnosis | `POST /v1/leak/score` |
+
+---
+
+## 🗂️ Clean Project Directory Structure
+
 ```
-
-### 3.2 Train Quantile Models
-Trains LightGBM models for q10, q50, and q95 on normal baseline cycles:
-```bash
-python -m training.train_model
-```
-Model artifacts and `model_version.json` are saved to `models/`.
-
-### 3.3 Evaluate Model
-Compares the new model against the old Mean + 2*SD rule and a model without household features:
-```bash
-python -m training.evaluate_model
-```
-
-### 3.4 Retrain from Resident & Owner Feedback
-Retrains the model with validated feedback data exported from the backend (`data/feedback/leak_feedback_export.csv`), incorporating label poisoning safeguards:
-```bash
-python -m training.retrain_from_feedback
+ml-service/
+├── main.py                     <- Unified FastAPI microservice (port 8000)
+├── predict.py                  <- Random Forest consumption prediction engine
+├── train_model.py              <- Unified training CLI (trains forecasting and/or leak models)
+├── generate_dataset.py         <- Unified synthetic dataset generator
+├── requirements.txt            <- Python dependencies
+├── Dockerfile                  <- Production Docker containerization
+├── ML_PRESENTATION_GUIDE.md    <- Presentation script and viva Q&A cheat sheet
+│
+├── app/                        <- Core FastAPI application package
+│   ├── config.py               <- Thresholds, ports, and configuration loader
+│   ├── features.py             <- 21-feature extraction pipeline for leak detection
+│   ├── predictor.py            <- LightGBM multi-quantile leak scoring engine
+│   ├── reasons.py              <- Explainable AI generator for human-readable diagnostic text
+│   ├── fallback.py             <- Fail-safe statistical rule (Mean + 2*SD) if ML is offline
+│   ├── schemas.py              <- Pydantic validation models for input/output contracts
+│   ├── security.py             <- API Key authentication header validator (X-API-KEY)
+│   └── logging_config.py       <- Formatted operational logger
+│
+├── data/                       <- Data Assets
+│   ├── consumption_forecasting/
+│   │   └── synthetic_water_usage.csv  <- 24-month household consumption training data
+│   ├── leak_detection/
+│   │   ├── synthetic/
+│   │   │   ├── synthetic_water_usage.csv  <- Multi-flat 18-cycle leak benchmark CSV
+│   │   │   └── synthetic_water_usage.json <- Multi-flat leak benchmark JSON
+│   │   └── feedback/
+│   │       └── leak_feedback_export.csv  <- Resident & owner ground-truth feedback
+│   └── feedback/               <- Feedback directory
+│
+├── models/                     <- Persisted Model Binaries
+│   ├── random_forest_model.pkl <- Trained Random Forest consumption forecaster (5.8 MB)
+│   ├── model_q10.joblib        <- 10th percentile LightGBM model
+│   ├── model_q50.joblib        <- 50th percentile median LightGBM model
+│   ├── model_q95.joblib        <- 95th percentile upper threshold LightGBM model
+│   └── model_version.json      <- Active model version (v1.1.0) and Pinball Loss metrics
+│
+├── training/                   <- Training, Generation, & Retraining Scripts
+│   ├── train_consumption_forecaster.py <- Pipeline for Random Forest consumption forecaster
+│   ├── train_leak_detector.py          <- Pipeline for LightGBM Quantile Leak Regressors
+│   ├── generate_consumption_data.py    <- Generates 24-month consumption dataset
+│   ├── generate_leak_data.py           <- Generates 18-cycle leak detection dataset
+│   ├── evaluate_leak_detector.py       <- Benchmarks LightGBM vs baseline rule
+│   └── retrain_from_feedback.py        <- Human-in-the-loop retraining with label anti-poisoning
+│
+├── reports/                    <- Performance Evaluation Reports
+│   └── model_metrics.json      <- JSON audit containing R2, MAE, RMSE, and feature importances
+│
+└── tests/                      <- 100% Automated Pytest Suite (25 Tests Passing)
+    ├── test_api.py             <- Tests health, auth, and batch scoring endpoints
+    ├── test_prediction_api.py  <- Tests consumption forecasting validation and outputs
+    ├── test_predictor.py       <- Tests quantile scoring bounds and fallback logic
+    ├── test_features.py        <- Tests feature extraction and trend slopes
+    └── test_edge_cases.py      <- Tests meter faults, vacancies, digit typos, and cold starts
 ```
 
 ---
 
-## 4. Running Tests
-Run the complete test suite covering feature engineering, predictor quantiles, API endpoints, and edge cases:
+## 🚀 Quick Execution Guide
+
+### 1. Start the Microservice
 ```bash
-pytest -v
+py -m uvicorn main:app --host 0.0.0.0 --port 8000
 ```
 
----
-
-## 5. Starting the Service
-Start the FastAPI service on port 8000:
+### 2. Run All Automated Tests
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+py -m pytest -v
+```
+*(Runs 25 automated tests covering APIs, models, feature extraction, and edge cases)*
+
+### 3. Retrain Models
+```bash
+# Train both models
+py train_model.py
+
+# Or train individually
+py train_model.py --model forecasting
+py train_model.py --model leak
 ```
 
-Interactive Swagger documentation is available at:
-`http://localhost:8000/docs`
-
----
-
-## 6. Docker Deployment
+### 4. Regenerate Benchmark Data
 ```bash
-docker build -t aquaflow-ml-service .
-docker run -p 8000:8000 --env ML_API_KEY=test-ml-secret-key-aqua-flow-2026 aquaflow-ml-service
+py generate_dataset.py
 ```

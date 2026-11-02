@@ -90,13 +90,41 @@ public class DataInitializer {
             tariffRepository.save(new Tariff(null, 51, 1000, 6.50, 25.00));
         }
 
-        // 3. Synchronize PostgreSQL sequence to avoid primary key duplicate errors if running on Postgres
+        // 3. Ensure audit tables (owner_history and resident_history) exist
         try {
             org.hibernate.Session session = entityManager.unwrap(org.hibernate.Session.class);
             session.doWork(connection -> {
                 String dbProduct = connection.getMetaData().getDatabaseProductName();
-                if ("PostgreSQL".equalsIgnoreCase(dbProduct)) {
-                    try (java.sql.Statement stmt = connection.createStatement()) {
+                try (java.sql.Statement stmt = connection.createStatement()) {
+                    if ("PostgreSQL".equalsIgnoreCase(dbProduct)) {
+                        stmt.execute("CREATE TABLE IF NOT EXISTS owner_history (" +
+                                "id BIGSERIAL PRIMARY KEY, " +
+                                "owner_id BIGINT, " +
+                                "owner_name VARCHAR(150) NOT NULL, " +
+                                "email VARCHAR(150), " +
+                                "phone VARCHAR(50), " +
+                                "event_type VARCHAR(50) NOT NULL, " +
+                                "details VARCHAR(500), " +
+                                "actor VARCHAR(100), " +
+                                "timestamp TIMESTAMP NOT NULL)");
+
+                        stmt.execute("CREATE TABLE IF NOT EXISTS resident_history (" +
+                                "id BIGSERIAL PRIMARY KEY, " +
+                                "owner_id BIGINT NOT NULL, " +
+                                "building_id BIGINT, " +
+                                "building_name VARCHAR(150), " +
+                                "apartment_id BIGINT, " +
+                                "apartment_name VARCHAR(150), " +
+                                "room_number VARCHAR(50), " +
+                                "resident_id BIGINT, " +
+                                "resident_name VARCHAR(150) NOT NULL, " +
+                                "resident_email VARCHAR(150), " +
+                                "resident_phone VARCHAR(50), " +
+                                "activity_type VARCHAR(50) NOT NULL, " +
+                                "details VARCHAR(500), " +
+                                "actor VARCHAR(100), " +
+                                "timestamp TIMESTAMP NOT NULL)");
+
                         stmt.execute("SELECT setval('users_user_id_seq', COALESCE((SELECT MAX(user_id) FROM users), 1))");
                         stmt.execute("SELECT setval('building_owners_owner_id_seq', COALESCE((SELECT MAX(owner_id) FROM building_owners), 1))");
                         stmt.execute("SELECT setval('buildings_building_id_seq', COALESCE((SELECT MAX(building_id) FROM buildings), 1))");
@@ -106,14 +134,43 @@ public class DataInitializer {
                         stmt.execute("SELECT setval('tariff_tariff_id_seq', COALESCE((SELECT MAX(tariff_id) FROM tariff), 1))");
                         stmt.execute("SELECT setval('bills_bill_id_seq', COALESCE((SELECT MAX(bill_id) FROM bills), 1))");
                         stmt.execute("SELECT setval('notifications_notification_id_seq', COALESCE((SELECT MAX(notification_id) FROM notifications), 1))");
-                    } catch (Exception ex) {
-                        log.debug("Error executing sequence sync: {}", ex.getMessage());
+                        log.info("PostgreSQL Sequences and Audit tables synchronized successfully!");
+                    } else {
+                        stmt.execute("CREATE TABLE IF NOT EXISTS owner_history (" +
+                                "id BIGINT AUTO_INCREMENT PRIMARY KEY, " +
+                                "owner_id BIGINT, " +
+                                "owner_name VARCHAR(150) NOT NULL, " +
+                                "email VARCHAR(150), " +
+                                "phone VARCHAR(50), " +
+                                "event_type VARCHAR(50) NOT NULL, " +
+                                "details VARCHAR(500), " +
+                                "actor VARCHAR(100), " +
+                                "timestamp DATETIME NOT NULL)");
+
+                        stmt.execute("CREATE TABLE IF NOT EXISTS resident_history (" +
+                                "id BIGINT AUTO_INCREMENT PRIMARY KEY, " +
+                                "owner_id BIGINT NOT NULL, " +
+                                "building_id BIGINT, " +
+                                "building_name VARCHAR(150), " +
+                                "apartment_id BIGINT, " +
+                                "apartment_name VARCHAR(150), " +
+                                "room_number VARCHAR(50), " +
+                                "resident_id BIGINT, " +
+                                "resident_name VARCHAR(150) NOT NULL, " +
+                                "resident_email VARCHAR(150), " +
+                                "resident_phone VARCHAR(50), " +
+                                "activity_type VARCHAR(50) NOT NULL, " +
+                                "details VARCHAR(500), " +
+                                "actor VARCHAR(100), " +
+                                "timestamp DATETIME NOT NULL)");
+                        log.info("MySQL History Audit tables verified and ready.");
                     }
-                    log.info("PostgreSQL Sequences synchronized successfully!");
+                } catch (Exception ex) {
+                    log.warn("Database initialization audit table check note: {}", ex.getMessage());
                 }
             });
         } catch (Exception e) {
-            log.debug("Sequence synchronization skipped: {}", e.getMessage());
+            log.debug("Database initialization note: {}", e.getMessage());
         }
 
         log.info("DataInitializer completed: Single Super Admin active (admin@smartwater.com / Admin@123456)");
