@@ -23,6 +23,19 @@ export default function OwnerBillingPage() {
     endDate: new Date(Date.now() + 30 * 86400000).toISOString().substring(0, 10)
   });
   const [markupInput, setMarkupInput] = useState('20');
+  const [cycleSuccessBanner, setCycleSuccessBanner] = useState('');
+
+  // Read URL query parameter for tab selection (e.g. ?tab=purchases)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam) {
+      const upper = tabParam.toUpperCase();
+      if (['CYCLES', 'PURCHASES', 'TARIFF', 'INVOICES'].includes(upper)) {
+        setActiveTab(upper);
+      }
+    }
+  }, []);
 
   // Fetch Owner's Buildings on mount
   useEffect(() => {
@@ -200,7 +213,9 @@ export default function OwnerBillingPage() {
     const confirmMsg = `CONFIRM BILLING CYCLE CREATION\n\n` +
       `Target Building: ${bName} (ID: ${selectedBuildingId})\n` +
       `Period: ${cycleForm.startDate} to ${cycleForm.endDate}\n\n` +
-      `Are you sure you want to open this billing cycle for ${bName}?`;
+      `Important Workflow Step:\n` +
+      `After creating this billing cycle, you will be automatically navigated to "2. Bulk Water Purchases" to record bulk water purchases (tankers/municipal supply) for this cycle to calculate the dynamic 3-tier tariff before issuing bills.\n\n` +
+      `Proceed with creating this billing cycle?`;
 
     if (!window.confirm(confirmMsg)) {
       return;
@@ -214,8 +229,12 @@ export default function OwnerBillingPage() {
       });
 
       const newCycle = res.data;
-      alert(`Billing cycle #${newCycle.id} created successfully for ${bName} (${newCycle.startDate} to ${newCycle.endDate})!`);
+      setSelectedCycleId(newCycle.id);
       fetchData(selectedBuildingId, newCycle.id);
+      setActiveTab('PURCHASES');
+      setCycleSuccessBanner(
+        `Billing cycle #${newCycle.id} (${newCycle.startDate} to ${newCycle.endDate}) created successfully! First create the bulk water purchase for this billing cycle below to set up procurement costs and calculate 3-tier tariffs.`
+      );
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to create billing cycle.');
     } finally {
@@ -227,6 +246,24 @@ export default function OwnerBillingPage() {
 
   const handleFinalizeCycle = async (cycleId) => {
     const cycle = cycles.find(c => String(c.id) === String(cycleId));
+
+    const cyclePurchases = String(cycleId) === String(selectedCycleId) ? purchases : [];
+    if (cyclePurchases.length === 0) {
+      const wantPurchase = window.confirm(
+        `⚠️ Bulk Water Purchases Advisory:\n\n` +
+        `Billing Cycle #${cycleId} currently has 0 bulk water purchases recorded.\n` +
+        `Without recorded water purchases, the average procurement cost will be ₹0.00.\n\n` +
+        `Click "OK" to navigate to "2. Bulk Water Purchases" to record purchases first.\n` +
+        `Click "Cancel" to proceed with finalization anyway.`
+      );
+      if (wantPurchase) {
+        setSelectedCycleId(cycleId);
+        fetchCycleData(selectedBuildingId, cycleId);
+        setActiveTab('PURCHASES');
+        return;
+      }
+    }
+
     const confirmMsg = `Are you sure you want to finalize Billing Cycle #${cycleId} (${cycle?.startDate} to ${cycle?.endDate})?\n\n` +
       `Once finalized:\n` +
       `• Meter readings cannot be modified\n` +
@@ -401,6 +438,17 @@ export default function OwnerBillingPage() {
                 </div>
               </div>
 
+              {/* Informative Guidance Banner on Creating Billing Cycle */}
+              <div className="alert alert-info py-2.5 px-3 small mb-3 border border-info-subtle rounded-3">
+                <div className="d-flex align-items-start gap-2">
+                  <i className="bi bi-info-circle-fill text-info fs-5 mt-0.5"></i>
+                  <div>
+                    <strong className="d-block mb-1 text-dark">Workflow Step 1 of 4:</strong>
+                    First create the billing cycle here. Once created, you will be automatically navigated to <strong>2. Bulk Water Purchases</strong> to record water purchases (vendor, volume &amp; unit cost) for this billing cycle.
+                  </div>
+                </div>
+              </div>
+
               <form onSubmit={handleOpenCycle}>
                 <div className="mb-3">
                   <label className="form-label fw-semibold fs-7 text-dark">Cycle Start Date *</label>
@@ -425,9 +473,13 @@ export default function OwnerBillingPage() {
                   />
                 </div>
 
-                <div className="alert alert-warning py-2 px-3 small mb-3 border border-warning-subtle rounded-3">
-                  <i className="bi bi-shield-exclamation me-1.5 text-warning-emphasis"></i>
-                  <strong>Confirmation Required:</strong> You will be prompted to confirm building and dates before creation.
+                <div className="alert alert-warning py-2.5 px-3 small mb-3 border border-warning-subtle rounded-3">
+                  <div className="d-flex align-items-start gap-2">
+                    <i className="bi bi-shield-exclamation text-warning-emphasis fs-6 mt-0.5"></i>
+                    <div>
+                      <strong>Auto-Navigation:</strong> You will be prompted to confirm dates. Upon creation, you will automatically be directed to <strong>Bulk Water Purchases</strong> to record procurement.
+                    </div>
+                  </div>
                 </div>
 
                 <button 
@@ -447,6 +499,19 @@ export default function OwnerBillingPage() {
                   )}
                 </button>
               </form>
+
+              {/* Direct Navigation Button to Bulk Water Purchases */}
+              {selectedCycleId && (
+                <div className="mt-3 pt-3 border-top text-center">
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary btn-sm w-100 fw-semibold d-flex align-items-center justify-content-center gap-1.5"
+                    onClick={() => setActiveTab('PURCHASES')}
+                  >
+                    <i className="bi bi-truck"></i> Navigate to Bulk Water Purchases for Cycle #{selectedCycleId} →
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -460,6 +525,7 @@ export default function OwnerBillingPage() {
                       <th>CYCLE ID</th>
                       <th>PERIOD</th>
                       <th>STATUS</th>
+                      <th>BULK WATER</th>
                       <th>ACTIONS</th>
                     </tr>
                   </thead>
@@ -473,6 +539,19 @@ export default function OwnerBillingPage() {
                             <span className={`badge ${c.status === 'OPEN' ? 'bg-success-subtle text-success border border-success-subtle' : c.status === 'FINALIZED' ? 'bg-secondary-subtle text-dark border' : 'bg-light text-muted border'}`}>
                               {c.status}
                             </span>
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-sm btn-outline-primary py-1 px-2.5 fs-8 fw-semibold d-flex align-items-center gap-1"
+                              onClick={() => {
+                                setSelectedCycleId(c.id);
+                                fetchCycleData(selectedBuildingId, c.id);
+                                setActiveTab('PURCHASES');
+                              }}
+                              title="Navigate to Bulk Water Purchases for this cycle"
+                            >
+                              <i className="bi bi-truck"></i> {String(c.id) === String(selectedCycleId) && purchases.length > 0 ? `${purchases.length} Purchase(s)` : 'Manage Purchases →'}
+                            </button>
                           </td>
                           <td>
                              {c.status === 'OPEN' && (
@@ -493,7 +572,7 @@ export default function OwnerBillingPage() {
                         </tr>
                       ))
                     ) : (
-                      <tr><td colSpan="4" className="text-center py-4 text-muted fs-7">No billing cycles opened yet for this building.</td></tr>
+                      <tr><td colSpan="5" className="text-center py-4 text-muted fs-7">No billing cycles opened yet for this building.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -506,6 +585,44 @@ export default function OwnerBillingPage() {
       {/* Tab 2: Bulk Water Purchases */}
       {activeTab === 'PURCHASES' && (
         <div className="row g-4">
+          {cycleSuccessBanner && (
+            <div className="col-12">
+              <div className="alert alert-success alert-dismissible fade show p-3.5 mb-2 rounded-4 shadow-sm border-start border-success border-4" role="alert">
+                <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <div className="d-flex align-items-center gap-3">
+                    <div className="bg-success text-white rounded-circle p-2 d-flex align-items-center justify-content-center" style={{ width: 40, height: 40 }}>
+                      <i className="bi bi-check-lg fs-5"></i>
+                    </div>
+                    <div>
+                      <h6 className="fw-bold text-success mb-0.5">Billing Cycle Active &amp; Ready</h6>
+                      <p className="text-dark small mb-0">{cycleSuccessBanner}</p>
+                    </div>
+                  </div>
+                  <button type="button" className="btn-close" onClick={() => setCycleSuccessBanner('')}></button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="col-12">
+            <div className="alert alert-light border shadow-sm py-2.5 px-3 mb-2 rounded-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+              <div className="d-flex align-items-center gap-2">
+                <span className="badge bg-primary px-2.5 py-1.5 fs-8 fw-semibold">Step 2: Bulk Procurement</span>
+                <span className="fs-7 text-dark">
+                  Target: <strong>Cycle #{selectedCycleId || 'None'}</strong> {currentCycle ? `(${currentCycle.startDate} to ${currentCycle.endDate})` : ''} • Building: <strong>{currentBuilding?.buildingName}</strong>
+                </span>
+              </div>
+              <div className="d-flex gap-2">
+                <button className="btn btn-sm btn-outline-secondary fw-semibold" onClick={() => setActiveTab('CYCLES')}>
+                  ← 1. Billing Cycles
+                </button>
+                <button className="btn btn-sm btn-outline-primary fw-semibold" onClick={() => setActiveTab('TARIFF')}>
+                  3. Tiered Tariff →
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="col-12">
             <div className="row g-3">
               <div className="col-md-4">

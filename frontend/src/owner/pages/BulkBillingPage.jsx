@@ -464,6 +464,12 @@ export default function BulkBillingPage() {
               </span>
             </div>
           </div>
+
+          <div className="col-12 text-end pt-1">
+            <a href="/owner/billing?tab=purchases" className="text-decoration-none small fw-semibold text-primary">
+              <i className="bi bi-truck me-1"></i> Manage Bulk Water Purchases for Dynamic Tariffs →
+            </a>
+          </div>
         </div>
 
         {/* Readiness Info Strip */}
