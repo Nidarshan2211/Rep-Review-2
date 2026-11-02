@@ -506,28 +506,29 @@ public class ResidentService {
             }
         }
 
-        // Audit log in resident_history using direct native SQL
+        // Audit log in resident_history using JPA entity
         try {
             com.smartwater.billing.owner.entity.Building bldg = resident.getBuilding();
             String bldgName = bldg != null ? bldg.getBuildingName() : "N/A";
             String aptNum = resident.getApartmentNumber() != null ? resident.getApartmentNumber() : "N/A";
             String resName = resident.getName() != null ? resident.getName() : "Resident";
 
-            entityManager.createNativeQuery(
-                    "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
-                    "VALUES (:oId, :bId, :bName, NULL, :aptName, :room, :resId, :resName, :resEmail, :resPhone, 'LEFT', 'Resident removed by building owner', :actor, NOW())"
-            )
-            .setParameter("oId", owner.getOwnerId())
-            .setParameter("bId", bldg != null ? bldg.getBuildingId() : null)
-            .setParameter("bName", bldgName)
-            .setParameter("aptName", "Flat " + aptNum)
-            .setParameter("room", aptNum)
-            .setParameter("resId", resident.getResidentId())
-            .setParameter("resName", resName)
-            .setParameter("resEmail", resident.getEmail())
-            .setParameter("resPhone", resident.getPhone())
-            .setParameter("actor", owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
-            .executeUpdate();
+            residentHistoryRepository.save(ResidentHistory.builder()
+                    .ownerId(owner.getOwnerId())
+                    .buildingId(bldg != null ? bldg.getBuildingId() : null)
+                    .buildingName(bldgName)
+                    .apartmentId(null)
+                    .apartmentName("Flat " + aptNum)
+                    .roomNumber(aptNum)
+                    .residentId(resident.getResidentId())
+                    .residentName(resName)
+                    .residentEmail(resident.getEmail())
+                    .residentPhone(resident.getPhone())
+                    .activityType("LEFT")
+                    .details("Resident removed by building owner")
+                    .actor(owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
+                    .timestamp(LocalDateTime.now())
+                    .build());
         } catch (Exception e) {
             log.warn("Failed to record resident history audit in deleteResident: {}", e.getMessage());
         }
@@ -597,7 +598,6 @@ public class ResidentService {
             }
         } finally {
             entityManager.createNativeQuery("SET FOREIGN_KEY_CHECKS = 1").executeUpdate();
-            entityManager.clear();
         }
     }
 
@@ -611,26 +611,27 @@ public class ResidentService {
             throw new BadRequestException("Unauthorized access to resident!");
         }
 
-        // Audit log in resident_history using direct native SQL
+        // Audit log in resident_history using JPA entity
         try {
             com.smartwater.billing.owner.entity.Building bldg = resident.getBuilding();
             BuildingOwner bOwner = bldg != null ? bldg.getOwner() : null;
             if (bOwner != null) {
-                entityManager.createNativeQuery(
-                        "INSERT INTO resident_history (owner_id, building_id, building_name, apartment_id, apartment_name, room_number, resident_id, resident_name, resident_email, resident_phone, activity_type, details, actor, timestamp) " +
-                        "VALUES (:oId, :bId, :bName, NULL, :aptName, :room, :resId, :resName, :resEmail, :resPhone, 'LEFT', 'Resident vacated by building owner', :actor, NOW())"
-                )
-                .setParameter("oId", bOwner.getOwnerId())
-                .setParameter("bId", bldg.getBuildingId())
-                .setParameter("bName", bldg.getBuildingName())
-                .setParameter("aptName", "Flat " + resident.getApartmentNumber())
-                .setParameter("room", resident.getApartmentNumber())
-                .setParameter("resId", resident.getResidentId())
-                .setParameter("resName", resident.getName() != null ? resident.getName() : "Resident")
-                .setParameter("resEmail", resident.getEmail())
-                .setParameter("resPhone", resident.getPhone())
-                .setParameter("actor", owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
-                .executeUpdate();
+                residentHistoryRepository.save(ResidentHistory.builder()
+                        .ownerId(bOwner.getOwnerId())
+                        .buildingId(bldg.getBuildingId())
+                        .buildingName(bldg.getBuildingName())
+                        .apartmentId(null)
+                        .apartmentName("Flat " + resident.getApartmentNumber())
+                        .roomNumber(resident.getApartmentNumber())
+                        .residentId(resident.getResidentId())
+                        .residentName(resident.getName() != null ? resident.getName() : "Resident")
+                        .residentEmail(resident.getEmail())
+                        .residentPhone(resident.getPhone())
+                        .activityType("LEFT")
+                        .details("Resident vacated by building owner")
+                        .actor(owner.getUser() != null ? owner.getUser().getName() : "Building Owner")
+                        .timestamp(LocalDateTime.now())
+                        .build());
             }
         } catch (Exception e) {
             log.warn("Failed to record resident history audit in vacate: {}", e.getMessage());

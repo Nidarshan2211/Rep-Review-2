@@ -98,7 +98,12 @@ public class BuildingOwnerService {
     public OwnerDashboardStats getOwnerDashboardStats(String email) {
         BuildingOwner owner = getOwnerByUserEmail(email);
         List<Building> buildings = buildingRepository.findByOwner(owner);
-        long totalResidents = residentRepository.findByBuildingOwnerOwnerId(owner.getOwnerId()).size();
+        long totalResidents = residentRepository.findByBuildingOwnerOwnerId(owner.getOwnerId()).stream()
+                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE
+                        && r.getApartmentNumber() != null
+                        && !r.getApartmentNumber().startsWith("FORMER-")
+                        && !r.getApartmentNumber().equalsIgnoreCase("Vacated"))
+                .count();
 
         // 1. Count pending resident onboarding / occupancy requests
         long pendingOccupancyRequests = 0;

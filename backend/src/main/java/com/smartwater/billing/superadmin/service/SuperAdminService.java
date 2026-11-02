@@ -8,6 +8,7 @@ import com.smartwater.billing.owner.entity.Building;
 import com.smartwater.billing.owner.entity.BuildingOwner;
 import com.smartwater.billing.owner.repository.*;
 import com.smartwater.billing.owner.service.BuildingOwnerService;
+import com.smartwater.billing.resident.entity.Resident;
 import com.smartwater.billing.resident.repository.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -58,7 +59,12 @@ public class SuperAdminService {
         long totalOwners = ownerRepository.count();
         long pendingOwners = ownerRepository.findByApprovalStatus(BuildingOwner.ApprovalStatus.PENDING).size();
         long totalBuildings = buildingRepository.count();
-        long totalResidents = residentRepository.count();
+        long totalResidents = residentRepository.findAll().stream()
+                .filter(r -> r.getAccountStatus() == Resident.AccountStatus.ACTIVE
+                        && r.getApartmentNumber() != null
+                        && !r.getApartmentNumber().startsWith("FORMER-")
+                        && !r.getApartmentNumber().equalsIgnoreCase("Vacated"))
+                .count();
         Double totalRev = billRepository.getTotalSystemRevenue();
         double totalSystemRevenue = totalRev != null ? totalRev : 0.0;
 

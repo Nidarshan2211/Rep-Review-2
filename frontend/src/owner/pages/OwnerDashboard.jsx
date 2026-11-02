@@ -65,10 +65,14 @@ export default function OwnerDashboard() {
       {/* Stat Cards */}
       <div className="row g-3 mb-4">
         <div className="col-md-6 col-lg-3">
-          <StatCard title="Buildings Managed" value={stats?.totalBuildings || 0} icon="bi-building" />
+          <Link to="/owner/buildings" className="text-decoration-none d-block h-100">
+            <StatCard title="Buildings Managed" value={stats?.totalBuildings || 0} icon="bi-building" />
+          </Link>
         </div>
         <div className="col-md-6 col-lg-3">
-          <StatCard title="Total Residents" value={stats?.totalResidents || 0} icon="bi-people" />
+          <Link to="/owner/residents" className="text-decoration-none d-block h-100">
+            <StatCard title="Total Residents" value={stats?.totalResidents || 0} subtext="Active Occupants" icon="bi-people" />
+          </Link>
         </div>
         <div className="col-md-6 col-lg-3">
           <Link to="/owner/residents" className="text-decoration-none d-block h-100">
@@ -81,7 +85,9 @@ export default function OwnerDashboard() {
           </Link>
         </div>
         <div className="col-md-6 col-lg-3">
-          <StatCard title="Total Revenue" value={`₹${(stats?.totalRevenue || 0).toFixed(2)}`} icon="bi-cash-stack" />
+          <Link to="/owner/invoices" className="text-decoration-none d-block h-100">
+            <StatCard title="Total Revenue" value={`₹${(stats?.totalRevenue || 0).toFixed(2)}`} icon="bi-cash-stack" />
+          </Link>
         </div>
       </div>
 
