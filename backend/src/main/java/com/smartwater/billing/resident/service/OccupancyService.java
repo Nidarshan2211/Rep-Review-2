@@ -834,6 +834,8 @@ public class OccupancyService {
         resp.setReviewedBy(req.getReviewedBy());
         resp.setRejectionReason(req.getRejectionReason());
         resp.setNotes(req.getNotes());
+        resp.setHouseholdSize(req.getHouseholdSize());
+        resp.setChildrenCount(req.getChildrenCount());
         return resp;
     }
 }

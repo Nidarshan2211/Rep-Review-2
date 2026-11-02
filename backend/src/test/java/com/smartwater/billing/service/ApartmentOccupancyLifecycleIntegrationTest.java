@@ -6,6 +6,7 @@ import com.smartwater.billing.resident.dto.OccupancyDTOs.*;
 import com.smartwater.billing.owner.entity.*;
 import com.smartwater.billing.resident.entity.*;
 import com.smartwater.billing.resident.entity.ApartmentOccupancy.OccupancyStatus;
+import com.smartwater.billing.resident.entity.OccupancyRequest.RequestStatus;
 import com.smartwater.billing.common.exception.BadRequestException;
 import com.smartwater.billing.common.repository.*;
 import com.smartwater.billing.owner.repository.*;
@@ -98,6 +99,9 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
     private NotificationRepository notificationRepository;
 
     @Autowired
+    private HouseholdSizeHistoryRepository historyRepository;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     private BuildingOwner owner1;
@@ -111,6 +115,7 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
         billRepository.deleteAll();
         waterUsageRepository.deleteAll();
         residentInvitationRepository.deleteAll();
+        historyRepository.deleteAll();
         occupancyRepository.deleteAll();
         waterMeterRepository.deleteAll();
         apartmentRepository.deleteAll();
@@ -217,24 +222,33 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
         req.setRoomNumber("101");
         ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
 
-        // Resident registers
+        // Resident registers with mandatory building, apartment, and household details
         RegisterResidentRequest reg = new RegisterResidentRequest();
         reg.setName("John Resident");
         reg.setEmail("john.res@test.com");
         reg.setPassword("Secret@123");
         reg.setConfirmPassword("Secret@123");
         reg.setPhone("9876543210");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(2);
+        reg.setChildrenCount(0);
         var loginResp = authService.registerResident(reg);
         assertNotNull(loginResp.getToken());
         assertEquals("RESIDENT", loginResp.getRole());
 
-        // Browse available
-        List<AvailableApartmentResponse> available = apartmentService.getAvailableApartments(building1.getBuildingId(), null);
-        assertEquals(1, available.size());
-        assertEquals("101", available.get(0).getRoomNumber());
+        // Occupancy request was created
+        List<OccupancyRequestResponse> pending = occupancyService.getOwnerOccupancyRequests(owner1.getUser().getEmail(), OccupancyRequest.RequestStatus.PENDING);
+        assertEquals(1, pending.size());
+        assertEquals("John Resident", pending.get(0).getResidentName());
 
-        // Claim apartment
-        OccupancyResponse occ = occupancyService.claimApartment("john.res@test.com", apt.getApartmentId());
+        // Owner approves request
+        OccupancyRequestResponse approved = occupancyService.reviewOccupancyRequest(owner1.getUser().getEmail(), pending.get(0).getRequestId(), new ReviewOccupancyRequest(true, null));
+        assertEquals("APPROVED", approved.getStatus());
+
+        // Verify active occupancy
+        OccupancyResponse occ = occupancyService.getCurrentOccupancy("john.res@test.com");
+        assertNotNull(occ);
         assertEquals("ACTIVE", occ.getStatus());
         assertEquals("Green Residency", occ.getBuildingName());
         assertEquals("101", occ.getRoomNumber());
@@ -262,23 +276,34 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
         req.setRoomNumber("101");
         ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
 
-        // Resident 1 claims
+        // Resident 1 registers and is approved
         RegisterResidentRequest reg1 = new RegisterResidentRequest();
         reg1.setName("Resident One");
         reg1.setEmail("r1@test.com");
         reg1.setPassword("Secret@123");
+        reg1.setConfirmPassword("Secret@123");
+        reg1.setBuildingId(building1.getBuildingId());
+        reg1.setApartmentId(apt.getApartmentId());
+        reg1.setHouseholdSize(2);
+        reg1.setChildrenCount(0);
         authService.registerResident(reg1);
-        occupancyService.claimApartment("r1@test.com", apt.getApartmentId());
 
-        // Resident 2 registers and attempts to claim same unit
+        List<OccupancyRequestResponse> pending = occupancyService.getOwnerOccupancyRequests(owner1.getUser().getEmail(), OccupancyRequest.RequestStatus.PENDING);
+        occupancyService.reviewOccupancyRequest(owner1.getUser().getEmail(), pending.get(0).getRequestId(), new ReviewOccupancyRequest(true, null));
+
+        // Resident 2 registers and attempts to choose the occupied unit
         RegisterResidentRequest reg2 = new RegisterResidentRequest();
         reg2.setName("Resident Two");
         reg2.setEmail("r2@test.com");
         reg2.setPassword("Secret@123");
-        authService.registerResident(reg2);
+        reg2.setConfirmPassword("Secret@123");
+        reg2.setBuildingId(building1.getBuildingId());
+        reg2.setApartmentId(apt.getApartmentId());
+        reg2.setHouseholdSize(2);
+        reg2.setChildrenCount(0);
 
         assertThrows(BadRequestException.class, () -> {
-            occupancyService.claimApartment("r2@test.com", apt.getApartmentId());
+            authService.registerResident(reg2);
         });
     }
 
@@ -295,8 +320,15 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
         reg.setName("Moving Resident");
         reg.setEmail("mover@test.com");
         reg.setPassword("Secret@123");
+        reg.setConfirmPassword("Secret@123");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(2);
+        reg.setChildrenCount(0);
         authService.registerResident(reg);
-        occupancyService.claimApartment("mover@test.com", apt.getApartmentId());
+
+        List<OccupancyRequestResponse> pending = occupancyService.getOwnerOccupancyRequests(owner1.getUser().getEmail(), OccupancyRequest.RequestStatus.PENDING);
+        occupancyService.reviewOccupancyRequest(owner1.getUser().getEmail(), pending.get(0).getRequestId(), new ReviewOccupancyRequest(true, null));
 
         // Record a bill to verify history preservation
         Resident resident = residentRepository.findByEmailIgnoreCase("mover@test.com").orElseThrow();
@@ -306,7 +338,7 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
                 .billYear(2026)
                 .units(15.0)
                 .amount(450.0)
-                .status(Bill.BillStatus.UNPAID)
+                .status(Bill.BillStatus.PAID)
                 .dueDate(LocalDate.now().plusDays(10))
                 .build();
         billRepository.save(bill);
@@ -346,13 +378,21 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
             occupancyService.moveOut("mover@test.com", moveOutReq);
         });
 
-        // Verify new tenant can now claim the vacated unit
+        // Verify new tenant can now register for the vacated unit
         RegisterResidentRequest regNew = new RegisterResidentRequest();
         regNew.setName("New Tenant");
         regNew.setEmail("newtenant@test.com");
         regNew.setPassword("Secret@123");
+        regNew.setConfirmPassword("Secret@123");
+        regNew.setBuildingId(building1.getBuildingId());
+        regNew.setApartmentId(apt.getApartmentId());
+        regNew.setHouseholdSize(3);
+        regNew.setChildrenCount(1);
         authService.registerResident(regNew);
-        OccupancyResponse newOcc = occupancyService.claimApartment("newtenant@test.com", apt.getApartmentId());
+
+        List<OccupancyRequestResponse> newPending = occupancyService.getOwnerOccupancyRequests(owner1.getUser().getEmail(), OccupancyRequest.RequestStatus.PENDING);
+        occupancyService.reviewOccupancyRequest(owner1.getUser().getEmail(), newPending.get(0).getRequestId(), new ReviewOccupancyRequest(true, null));
+        OccupancyResponse newOcc = occupancyService.getCurrentOccupancy("newtenant@test.com");
         assertEquals("ACTIVE", newOcc.getStatus());
     }
 
@@ -366,26 +406,18 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
         req.setRoomNumber("301");
         ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
 
-        // Resident registers independently
+        // Resident registers with flat 301 and household details
         RegisterResidentRequest reg = new RegisterResidentRequest();
         reg.setName("Grace Applicant");
         reg.setEmail("grace@test.com");
         reg.setPassword("Secret@123");
+        reg.setConfirmPassword("Secret@123");
         reg.setPhone("9988776655");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(3);
+        reg.setChildrenCount(1);
         authService.registerResident(reg);
-
-        // Grace browses public owners and buildings
-        List<PublicOwnerResponse> owners = apartmentService.getPublicOwners();
-        assertFalse(owners.isEmpty());
-        List<PublicBuildingResponse> bldgs = apartmentService.getOwnerBuildings(owner1.getOwnerId());
-        assertEquals(1, bldgs.size());
-
-        // Grace submits occupancy request
-        SubmitOccupancyRequest subReq = new SubmitOccupancyRequest(apt.getApartmentId(), "Looking forward to moving in!");
-        OccupancyRequestResponse reqResp = occupancyService.submitOccupancyRequest("grace@test.com", subReq);
-        assertNotNull(reqResp.getRequestId());
-        assertEquals("PENDING", reqResp.getStatus());
-        assertEquals("301", reqResp.getRoomNumber());
 
         // Unit should not be available for other residents while request is pending
         List<AvailableApartmentResponse> available = apartmentService.getAvailableApartments(building1.getBuildingId(), null);
@@ -396,15 +428,16 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
         assertEquals(1, pendingList.size());
         assertEquals("Grace Applicant", pendingList.get(0).getResidentName());
         assertEquals("grace@test.com", pendingList.get(0).getResidentEmail());
+        Long requestId = pendingList.get(0).getRequestId();
 
         // Unauthorized owner 2 cannot approve owner 1's request
         ReviewOccupancyRequest approveReq = new ReviewOccupancyRequest(true, null);
         assertThrows(BadRequestException.class, () -> {
-            occupancyService.reviewOccupancyRequest(owner2.getUser().getEmail(), reqResp.getRequestId(), approveReq);
+            occupancyService.reviewOccupancyRequest(owner2.getUser().getEmail(), requestId, approveReq);
         });
 
         // Owner 1 approves request
-        OccupancyRequestResponse approvedResp = occupancyService.reviewOccupancyRequest(owner1.getUser().getEmail(), reqResp.getRequestId(), approveReq);
+        OccupancyRequestResponse approvedResp = occupancyService.reviewOccupancyRequest(owner1.getUser().getEmail(), requestId, approveReq);
         assertEquals("APPROVED", approvedResp.getStatus());
 
         // Grace now has active occupancy
@@ -436,15 +469,20 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
         reg.setName("Tom Applicant");
         reg.setEmail("tom@test.com");
         reg.setPassword("Secret@123");
+        reg.setConfirmPassword("Secret@123");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(2);
+        reg.setChildrenCount(0);
         authService.registerResident(reg);
 
-        // Tom submits request
-        SubmitOccupancyRequest subReq = new SubmitOccupancyRequest(apt.getApartmentId(), "Please approve");
-        OccupancyRequestResponse reqResp = occupancyService.submitOccupancyRequest("tom@test.com", subReq);
+        List<OccupancyRequestResponse> pendingList = occupancyService.getOwnerOccupancyRequests(owner1.getUser().getEmail(), OccupancyRequest.RequestStatus.PENDING);
+        assertEquals(1, pendingList.size());
+        Long reqId = pendingList.get(0).getRequestId();
 
         // Owner rejects with reason
         ReviewOccupancyRequest rejectReq = new ReviewOccupancyRequest(false, "Verification failed");
-        OccupancyRequestResponse rejectedResp = occupancyService.reviewOccupancyRequest(owner1.getUser().getEmail(), reqResp.getRequestId(), rejectReq);
+        OccupancyRequestResponse rejectedResp = occupancyService.reviewOccupancyRequest(owner1.getUser().getEmail(), reqId, rejectReq);
         assertEquals("REJECTED", rejectedResp.getStatus());
         assertEquals("Verification failed", rejectedResp.getRejectionReason());
 
@@ -454,5 +492,207 @@ public class ApartmentOccupancyLifecycleIntegrationTest {
 
         // Tom has no active occupancy
         assertNull(occupancyService.getCurrentOccupancy("tom@test.com"));
+    }
+
+    // =========================================================================
+    // DEDICATED SCENARIO TESTS: All 8 Required Validation Scenarios
+    // =========================================================================
+
+    @Test
+    @DisplayName("Scenario 1: No building selected -> Registration rejected")
+    void testScenario1_NoBuildingSelected_ThrowsBadRequest() {
+        CreateApartmentRequest req = new CreateApartmentRequest();
+        req.setFloorNumber(1);
+        req.setApartmentName("Flat 501");
+        req.setRoomNumber("501");
+        ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
+
+        RegisterResidentRequest reg = new RegisterResidentRequest();
+        reg.setName("User S1");
+        reg.setEmail("s1@test.com");
+        reg.setPassword("Secret@123");
+        reg.setBuildingId(null); // Missing building
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(2);
+        reg.setChildrenCount(0);
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> authService.registerResident(reg));
+        assertTrue(ex.getMessage().contains("Building selection is required"));
+    }
+
+    @Test
+    @DisplayName("Scenario 2: No apartment selected -> Registration rejected")
+    void testScenario2_NoApartmentSelected_ThrowsBadRequest() {
+        RegisterResidentRequest reg = new RegisterResidentRequest();
+        reg.setName("User S2");
+        reg.setEmail("s2@test.com");
+        reg.setPassword("Secret@123");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(null); // Missing apartment
+        reg.setHouseholdSize(2);
+        reg.setChildrenCount(0);
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> authService.registerResident(reg));
+        assertTrue(ex.getMessage().contains("Apartment unit selection is required"));
+    }
+
+    @Test
+    @DisplayName("Scenario 3: No household details -> Registration rejected")
+    void testScenario3_NoHouseholdDetails_ThrowsBadRequest() {
+        CreateApartmentRequest req = new CreateApartmentRequest();
+        req.setFloorNumber(1);
+        req.setApartmentName("Flat 503");
+        req.setRoomNumber("503");
+        ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
+
+        RegisterResidentRequest reg = new RegisterResidentRequest();
+        reg.setName("User S3");
+        reg.setEmail("s3@test.com");
+        reg.setPassword("Secret@123");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(null); // Missing household size
+        reg.setChildrenCount(null); // Missing children count
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> authService.registerResident(reg));
+        assertTrue(ex.getMessage().contains("Total people (household size) is required"));
+    }
+
+    @Test
+    @DisplayName("Scenario 4: Total People = 0 -> Registration rejected")
+    void testScenario4_TotalPeopleZero_ThrowsBadRequest() {
+        CreateApartmentRequest req = new CreateApartmentRequest();
+        req.setFloorNumber(1);
+        req.setApartmentName("Flat 504");
+        req.setRoomNumber("504");
+        ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
+
+        RegisterResidentRequest reg = new RegisterResidentRequest();
+        reg.setName("User S4");
+        reg.setEmail("s4@test.com");
+        reg.setPassword("Secret@123");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(0); // 0 is invalid (min is 1)
+        reg.setChildrenCount(0);
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> authService.registerResident(reg));
+        assertTrue(ex.getMessage().contains("Total people must be between 1 and 15"));
+    }
+
+    @Test
+    @DisplayName("Scenario 5: Total People = 16 -> Registration rejected")
+    void testScenario5_TotalPeopleSixteen_ThrowsBadRequest() {
+        CreateApartmentRequest req = new CreateApartmentRequest();
+        req.setFloorNumber(1);
+        req.setApartmentName("Flat 505");
+        req.setRoomNumber("505");
+        ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
+
+        RegisterResidentRequest reg = new RegisterResidentRequest();
+        reg.setName("User S5");
+        reg.setEmail("s5@test.com");
+        reg.setPassword("Secret@123");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(16); // 16 is invalid (max is 15)
+        reg.setChildrenCount(0);
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> authService.registerResident(reg));
+        assertTrue(ex.getMessage().contains("Total people must be between 1 and 15"));
+    }
+
+    @Test
+    @DisplayName("Scenario 6: Children greater than Total People -> Registration rejected")
+    void testScenario6_ChildrenGreaterThanTotalPeople_ThrowsBadRequest() {
+        CreateApartmentRequest req = new CreateApartmentRequest();
+        req.setFloorNumber(1);
+        req.setApartmentName("Flat 506");
+        req.setRoomNumber("506");
+        ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
+
+        RegisterResidentRequest reg = new RegisterResidentRequest();
+        reg.setName("User S6");
+        reg.setEmail("s6@test.com");
+        reg.setPassword("Secret@123");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(2);
+        reg.setChildrenCount(3); // 3 children > 2 total people!
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> authService.registerResident(reg));
+        assertTrue(ex.getMessage().contains("Children count cannot exceed total people"));
+    }
+
+    @Test
+    @DisplayName("Scenario 7: Apartment already occupied -> Registration rejected")
+    void testScenario7_ApartmentAlreadyOccupied_ThrowsBadRequest() {
+        CreateApartmentRequest req = new CreateApartmentRequest();
+        req.setFloorNumber(1);
+        req.setApartmentName("Flat 507");
+        req.setRoomNumber("507");
+        ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
+
+        // Occupy the apartment first
+        RegisterResidentRequest firstTenant = new RegisterResidentRequest();
+        firstTenant.setName("Tenant Prime");
+        firstTenant.setEmail("prime@test.com");
+        firstTenant.setPassword("Secret@123");
+        firstTenant.setBuildingId(building1.getBuildingId());
+        firstTenant.setApartmentId(apt.getApartmentId());
+        firstTenant.setHouseholdSize(3);
+        firstTenant.setChildrenCount(1);
+        authService.registerResident(firstTenant);
+
+        List<OccupancyRequestResponse> pending = occupancyService.getOwnerOccupancyRequests(owner1.getUser().getEmail(), OccupancyRequest.RequestStatus.PENDING);
+        occupancyService.reviewOccupancyRequest(owner1.getUser().getEmail(), pending.get(0).getRequestId(), new ReviewOccupancyRequest(true, null));
+
+        // Attempt second registration for already occupied unit
+        RegisterResidentRequest secondTenant = new RegisterResidentRequest();
+        secondTenant.setName("Second Tenant");
+        secondTenant.setEmail("second@test.com");
+        secondTenant.setPassword("Secret@123");
+        secondTenant.setBuildingId(building1.getBuildingId());
+        secondTenant.setApartmentId(apt.getApartmentId());
+        secondTenant.setHouseholdSize(1);
+        secondTenant.setChildrenCount(0);
+
+        BadRequestException ex = assertThrows(BadRequestException.class, () -> authService.registerResident(secondTenant));
+        assertTrue(ex.getMessage().contains("is already occupied"));
+    }
+
+    @Test
+    @DisplayName("Scenario 8: All fields valid -> Account created successfully")
+    void testScenario8_AllFieldsValid_AccountCreatedSuccessfully() {
+        CreateApartmentRequest req = new CreateApartmentRequest();
+        req.setFloorNumber(2);
+        req.setApartmentName("Flat 508");
+        req.setRoomNumber("508");
+        ApartmentResponse apt = apartmentService.createApartment(owner1.getUser().getEmail(), building1.getBuildingId(), req);
+
+        RegisterResidentRequest reg = new RegisterResidentRequest();
+        reg.setName("Valid Resident");
+        reg.setEmail("valid.res@test.com");
+        reg.setPassword("Secret@123");
+        reg.setConfirmPassword("Secret@123");
+        reg.setPhone("9988776655");
+        reg.setBuildingId(building1.getBuildingId());
+        reg.setApartmentId(apt.getApartmentId());
+        reg.setHouseholdSize(4);
+        reg.setChildrenCount(2);
+
+        var response = authService.registerResident(reg);
+        assertNotNull(response);
+        assertNotNull(response.getToken());
+        assertEquals("RESIDENT", response.getRole());
+        assertEquals("valid.res@test.com", response.getEmail());
+
+        // Verify pending occupancy request was registered with correct household details
+        var pending = occupancyService.getResidentPendingRequest("valid.res@test.com");
+        assertNotNull(pending);
+        assertEquals("PENDING", pending.getStatus());
+        assertEquals(apt.getApartmentId(), pending.getApartmentId());
+        assertEquals(4, pending.getHouseholdSize());
+        assertEquals(2, pending.getChildrenCount());
     }
 }

@@ -1,6 +1,9 @@
 package com.smartwater.billing.resident.dto;
 
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -9,10 +12,10 @@ import java.time.LocalDateTime;
 public class OccupancyDTOs {
 
     public static class RegisterResidentRequest {
-        @NotBlank(message = "Name is required")
+        @NotBlank(message = "Full name is required")
         private String name;
 
-        @NotBlank(message = "Email is required")
+        @NotBlank(message = "Email address is required")
         @Email(message = "Invalid email format")
         private String email;
 
@@ -22,10 +25,29 @@ public class OccupancyDTOs {
 
         private String confirmPassword;
         private String phone;
+
+        @NotNull(message = "Building selection is required")
+        private Long buildingId;
+
+        @NotNull(message = "Apartment unit selection is required")
         private Long apartmentId;
+
         private String invitationToken;
+
+        @NotNull(message = "Total people (household size) is required")
+        @Min(value = 1, message = "Total people must be between 1 and 15")
+        @Max(value = 15, message = "Total people must be between 1 and 15")
         private Integer householdSize;
+
+        @NotNull(message = "Children count (under 12) is required")
+        @Min(value = 0, message = "Children count cannot be negative")
         private Integer childrenCount;
+
+        @AssertTrue(message = "Children count cannot exceed total people")
+        public boolean isChildrenValid() {
+            if (householdSize == null || childrenCount == null) return true;
+            return childrenCount <= householdSize;
+        }
 
         public RegisterResidentRequest() {}
 
@@ -43,6 +65,9 @@ public class OccupancyDTOs {
 
         public String getPhone() { return phone; }
         public void setPhone(String phone) { this.phone = phone; }
+
+        public Long getBuildingId() { return buildingId; }
+        public void setBuildingId(Long buildingId) { this.buildingId = buildingId; }
 
         public Long getApartmentId() { return apartmentId; }
         public void setApartmentId(Long apartmentId) { this.apartmentId = apartmentId; }
@@ -441,6 +466,8 @@ public class OccupancyDTOs {
         private String reviewedBy;
         private String rejectionReason;
         private String notes;
+        private Integer householdSize;
+        private Integer childrenCount;
 
         public OccupancyRequestResponse() {}
 
@@ -515,6 +542,12 @@ public class OccupancyDTOs {
 
         public String getNotes() { return notes; }
         public void setNotes(String notes) { this.notes = notes; }
+
+        public Integer getHouseholdSize() { return householdSize; }
+        public void setHouseholdSize(Integer householdSize) { this.householdSize = householdSize; }
+
+        public Integer getChildrenCount() { return childrenCount; }
+        public void setChildrenCount(Integer childrenCount) { this.childrenCount = childrenCount; }
     }
 
     public static class PublicOwnerResponse {

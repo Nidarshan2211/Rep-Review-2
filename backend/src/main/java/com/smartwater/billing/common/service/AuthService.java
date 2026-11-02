@@ -27,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 @Service
@@ -40,6 +41,7 @@ public class AuthService {
     private final ResidentInvitationRepository invitationRepository;
     private final ApartmentRepository apartmentRepository;
     private final ApartmentOccupancyRepository occupancyRepository;
+    private final OccupancyRequestRepository occupancyRequestRepository;
     private final HouseholdSizeHistoryRepository historyRepository;
     private final HouseholdProperties householdProperties;
     private final WaterMeterRepository waterMeterRepository;
@@ -56,6 +58,7 @@ public class AuthService {
             ResidentInvitationRepository invitationRepository,
             ApartmentRepository apartmentRepository,
             ApartmentOccupancyRepository occupancyRepository,
+            OccupancyRequestRepository occupancyRequestRepository,
             HouseholdSizeHistoryRepository historyRepository,
             HouseholdProperties householdProperties,
             WaterMeterRepository waterMeterRepository,
@@ -71,6 +74,7 @@ public class AuthService {
         this.invitationRepository = invitationRepository;
         this.apartmentRepository = apartmentRepository;
         this.occupancyRepository = occupancyRepository;
+        this.occupancyRequestRepository = occupancyRequestRepository;
         this.historyRepository = historyRepository;
         this.householdProperties = householdProperties;
         this.waterMeterRepository = waterMeterRepository;
@@ -198,6 +202,71 @@ public class AuthService {
             throw new BadRequestException("Passwords do not match.");
         }
 
+        // 1. Mandatory Building validation
+        if (request.getBuildingId() == null) {
+            throw new BadRequestException("Building selection is required.");
+        }
+        Building building = buildingRepository.findById(request.getBuildingId())
+                .orElseThrow(() -> new BadRequestException("Selected building not found."));
+        if (building.getOwner() == null || building.getOwner().getApprovalStatus() != BuildingOwner.ApprovalStatus.APPROVED) {
+            throw new BadRequestException("Cannot register in this building: The property building owner has not been approved by the Super Admin.");
+        }
+
+        // 2. Mandatory Apartment Unit validation
+        if (request.getApartmentId() == null) {
+            throw new BadRequestException("Apartment unit selection is required.");
+        }
+        Apartment apartment = apartmentRepository.findById(request.getApartmentId())
+                .orElseThrow(() -> new BadRequestException("Selected apartment unit not found."));
+
+        if (apartment.getBuilding() == null || !apartment.getBuilding().getBuildingId().equals(building.getBuildingId())) {
+            throw new BadRequestException("Selected apartment unit does not belong to the selected building.");
+        }
+
+        // Check if apartment is already actively occupied
+        Optional<ApartmentOccupancy> occupied = occupancyRepository.findFirstByApartmentApartmentIdAndStatus(apartment.getApartmentId(), OccupancyStatus.ACTIVE);
+        if (occupied.isPresent()) {
+            throw new BadRequestException("This apartment unit (" + apartment.getApartmentName() + ") is already occupied.");
+        }
+
+        // Check if apartment already has an active pending request
+        Optional<OccupancyRequest> pendingReq = occupancyRequestRepository.findActiveRequestByApartmentId(apartment.getApartmentId(), OccupancyRequest.RequestStatus.PENDING);
+        if (pendingReq.isPresent()) {
+            throw new BadRequestException("This apartment unit already has a pending occupancy request under review.");
+        }
+
+        // Check if apartment has an active unexpired invitation
+        List<ResidentInvitation> pendingInvites = invitationRepository.findByBuildingBuildingIdAndStatus(
+                building.getBuildingId(),
+                ResidentInvitation.InvitationStatus.PENDING
+        );
+        LocalDateTime now = LocalDateTime.now();
+        boolean hasPendingInvite = pendingInvites.stream().anyMatch(inv ->
+                ((inv.getApartment() != null && inv.getApartment().getApartmentId().equals(apartment.getApartmentId()))
+                        || (inv.getApartmentNumber() != null && inv.getApartmentNumber().equalsIgnoreCase(apartment.getRoomNumber())))
+                        && (inv.getExpiresAt() == null || inv.getExpiresAt().isAfter(now))
+        );
+        if (hasPendingInvite) {
+            throw new BadRequestException("This apartment unit currently has a pending invitation.");
+        }
+
+        // 3. Mandatory Household Details for Water Diagnostics validation
+        if (request.getHouseholdSize() == null) {
+            throw new BadRequestException("Total people (household size) is required.");
+        }
+        if (request.getHouseholdSize() < 1 || request.getHouseholdSize() > 15) {
+            throw new BadRequestException("Total people must be between 1 and 15.");
+        }
+        if (request.getChildrenCount() == null) {
+            throw new BadRequestException("Children count (under 12) is required.");
+        }
+        if (request.getChildrenCount() < 0) {
+            throw new BadRequestException("Children count cannot be negative.");
+        }
+        if (request.getChildrenCount() > request.getHouseholdSize()) {
+            throw new BadRequestException("Children count cannot exceed total people.");
+        }
+
         // Save User with explicit RESIDENT role only
         User user = User.builder()
                 .name(request.getName().trim())
@@ -211,13 +280,9 @@ public class AuthService {
         // Check if pre-existing resident row exists (e.g. from invitation)
         Resident resident = residentRepository.findByEmailIgnoreCase(email).orElse(null);
         if (resident == null) {
-            Building defaultBldg = buildingRepository.findAll().stream()
-                    .filter(b -> b.getOwner() != null && b.getOwner().getApprovalStatus() == BuildingOwner.ApprovalStatus.APPROVED)
-                    .findFirst()
-                    .orElse(null);
             resident = Resident.builder()
                     .user(user)
-                    .building(defaultBldg)
+                    .building(building)
                     .name(request.getName().trim())
                     .email(email)
                     .phone(request.getPhone() != null ? request.getPhone().trim() : "")
@@ -228,6 +293,7 @@ public class AuthService {
             resident = residentRepository.save(resident);
         } else {
             resident.setUser(user);
+            resident.setBuilding(building);
             resident.setName(request.getName().trim());
             if (request.getPhone() != null && !request.getPhone().trim().isEmpty()) {
                 resident.setPhone(request.getPhone().trim());
@@ -237,33 +303,13 @@ public class AuthService {
             resident = residentRepository.save(resident);
         }
 
-        // If an invitation token was provided during registration, validate and bind it
-        if (request.getInvitationToken() != null && !request.getInvitationToken().trim().isEmpty()) {
-            String rawToken = request.getInvitationToken().trim();
-            String tokenHash = TokenGenerator.hashToken(rawToken);
-            ResidentInvitation invitation = invitationRepository.findByTokenHash(tokenHash)
-                    .or(() -> invitationRepository.findByTokenHash(rawToken))
-                    .orElse(null);
-            if (invitation != null) {
-                invitation.setStatus(ResidentInvitation.InvitationStatus.ACCEPTED);
-                invitation.setAcceptedAt(LocalDateTime.now());
-                invitationRepository.save(invitation);
-                if (invitation.getApartment() != null) {
-                    occupancyService.claimApartment(email, invitation.getApartment().getApartmentId());
-                } else if (invitation.getBuilding() != null && invitation.getApartmentNumber() != null) {
-                    Apartment apt = apartmentRepository.findByBuildingBuildingIdAndRoomNumber(
-                            invitation.getBuilding().getBuildingId(),
-                            invitation.getApartmentNumber()
-                    ).orElse(null);
-                    if (apt != null) {
-                        occupancyService.claimApartment(email, apt.getApartmentId());
-                    }
-                }
-            }
-        } else if (request.getApartmentId() != null) {
-            // Automatically submit occupancy request if requested
-            occupancyService.submitOccupancyRequest(email, new SubmitOccupancyRequest(request.getApartmentId(), "Initial registration occupancy request"));
-        }
+        // Automatically submit occupancy request with household diagnostic details
+        occupancyService.submitOccupancyRequest(email, new SubmitOccupancyRequest(
+                apartment.getApartmentId(),
+                "Initial registration occupancy request",
+                request.getHouseholdSize(),
+                request.getChildrenCount()
+        ));
 
         Authentication authentication = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(email, request.getPassword().trim())
