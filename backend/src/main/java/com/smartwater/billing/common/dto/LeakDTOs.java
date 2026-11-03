@@ -28,6 +28,7 @@ public class LeakDTOs {
         private Double unitsConsumed;
         private Double expectedMin;
         private Double expectedMax;
+        private Double expectedUsage;
         private Double anomalyScore;
         private String anomalyStatus;
         private String anomalyReason;
@@ -43,6 +44,8 @@ public class LeakDTOs {
         private String feedbackNote;
         private LocalDateTime feedbackCreatedAt;
         private List<ResidentLeakHistoryItem> recentHistory;
+        private Boolean isFirstMonth;
+        private String baselineSource;
     }
 
     @Getter
@@ -57,10 +60,13 @@ public class LeakDTOs {
         private Double unitsConsumed;
         private Double expectedMin;
         private Double expectedMax;
+        private Double expectedUsage;
+        private String anomalyPattern;
         private String anomalyStatus;
         private Double anomalyScore;
         private Boolean hasFeedback;
         private String latestFeedback;
+        private Boolean isFirstMonth;
     }
 
     // -------------------------------------------------------------------------
@@ -138,6 +144,7 @@ public class LeakDTOs {
         private Double unitsConsumed;
         private Double expectedMin;
         private Double expectedMax;
+        private Double expectedUsage;
         private Double anomalyScore;
         private String anomalyStatus;
         private String anomalyReason;
@@ -148,6 +155,7 @@ public class LeakDTOs {
         private Double estimatedExtraCost;
         private Boolean hasFeedback;
         private String latestFeedback;
+        private Boolean isFirstMonth;
     }
 
     // -------------------------------------------------------------------------
@@ -261,6 +269,12 @@ public class LeakDTOs {
 
         @JsonProperty("expected_max")
         private Double expectedMax;
+
+        @JsonProperty("expected_usage")
+        private Double expectedUsage;
+
+        @JsonProperty("expected_kl")
+        private Double expectedKl;
 
         @JsonProperty("anomaly_reason")
         private String anomalyReason;

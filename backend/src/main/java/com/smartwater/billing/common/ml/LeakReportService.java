@@ -111,6 +111,8 @@ public class LeakReportService {
                 ? occ.getHouseholdSize()
                 : 2;
 
+        final boolean isFirstMonth = (usageHistory.size() <= 1);
+
         List<ResidentLeakHistoryItem> historyItems = usageHistory.stream().limit(12).map(u -> {
             Optional<LeakFeedback> uFb = feedbackRepository.findFirstByUsageUsageIdOrderByCreatedAtDesc(u.getUsageId());
             Double minVal = u.getExpectedMin();
@@ -119,6 +121,11 @@ public class LeakReportService {
                 minVal = Math.round((defaultHh * 0.10 * 30) * 10.0) / 10.0;
                 maxVal = Math.round((defaultHh * 0.25 * 30) * 10.0) / 10.0;
             }
+            Double medVal = Math.round(((minVal + maxVal) / 2.0) * 10.0) / 10.0;
+            String st = u.getAnomalyStatus();
+            if (st == null || st.isBlank()) {
+                st = isFirstMonth ? "INSUFFICIENT_HISTORY" : "NORMAL";
+            }
             return ResidentLeakHistoryItem.builder()
                     .usageId(u.getUsageId())
                     .month(u.getMonth())
@@ -126,10 +133,13 @@ public class LeakReportService {
                     .unitsConsumed(u.getUnitsConsumed())
                     .expectedMin(minVal)
                     .expectedMax(maxVal)
-                    .anomalyStatus(u.getAnomalyStatus() != null ? u.getAnomalyStatus() : "NORMAL")
-                    .anomalyScore(u.getAnomalyScore())
-                    .hasFeedback(uFb.isPresent())
-                    .latestFeedback(uFb.map(LeakFeedback::getFeedback).orElse(null))
+                    .expectedUsage(medVal)
+                    .anomalyPattern(u.getAnomalyPattern() != null ? u.getAnomalyPattern() : "NORMAL")
+                    .anomalyStatus(st)
+                    .anomalyScore(u.getAnomalyScore() != null ? u.getAnomalyScore() : 0.0)
+                    .hasFeedback(false)
+                    .latestFeedback(null)
+                    .isFirstMonth(isFirstMonth)
                     .build();
         }).collect(Collectors.toList());
 
@@ -181,6 +191,28 @@ public class LeakReportService {
             currentMin = Math.round((defaultHh * 0.10 * 30) * 10.0) / 10.0;
             currentMax = Math.round((defaultHh * 0.25 * 30) * 10.0) / 10.0;
         }
+        Double currentMedian = Math.round(((currentMin + currentMax) / 2.0) * 10.0) / 10.0;
+
+        String status = latestUsage.getAnomalyStatus();
+        if (status == null || status.isBlank()) {
+            status = isFirstMonth ? "INSUFFICIENT_HISTORY" : "NORMAL";
+        }
+
+        String reason = latestUsage.getAnomalyReason();
+        if (reason == null || reason.isBlank()) {
+            if (isFirstMonth) {
+                reason = String.format(java.util.Locale.US,
+                    "First billing cycle: Establishing initial baseline. Normal range (%.1f - %.1f kL) is an initial benchmark calibrated from your %d-person household profile (100-250 L/person/day). Personalized ML pattern learning requires at least 2 billing cycles.",
+                    currentMin, currentMax, defaultHh);
+            } else {
+                reason = "Consumption appears normal based on historical patterns.";
+            }
+        }
+
+        Double score = latestUsage.getAnomalyScore();
+        if (isFirstMonth && (score == null || score == 0.0)) {
+            score = 0.0;
+        }
 
         return ResidentLeakStatusResponse.builder()
                 .usageId(latestUsage.getUsageId())
@@ -192,21 +224,22 @@ public class LeakReportService {
                 .unitsConsumed(latestUsage.getUnitsConsumed())
                 .expectedMin(currentMin)
                 .expectedMax(currentMax)
-                .anomalyScore(latestUsage.getAnomalyScore())
-                .anomalyStatus(latestUsage.getAnomalyStatus() != null ? latestUsage.getAnomalyStatus() : "NORMAL")
-                .anomalyReason(latestUsage.getAnomalyReason() != null ? latestUsage.getAnomalyReason() : "Consumption appears normal.")
-                .anomalyConfidence(latestUsage.getAnomalyConfidence() != null ? latestUsage.getAnomalyConfidence() : "MEDIUM")
+                .expectedUsage(currentMedian)
+                .anomalyScore(score)
+                .anomalyStatus(status)
+                .anomalyReason(reason)
+                .anomalyConfidence(latestUsage.getAnomalyConfidence() != null ? latestUsage.getAnomalyConfidence() : (isFirstMonth ? "LOW" : "MEDIUM"))
                 .anomalyPattern(latestUsage.getAnomalyPattern() != null ? latestUsage.getAnomalyPattern() : "NORMAL")
                 .estimatedExtraCost(extraCost)
                 .incidentId(incidentId)
                 .incidentStatus(incidentStatus)
                 .householdSize(occ != null ? occ.getHouseholdSize() : 3)
                 .householdSizeConfirmed(occ != null && occ.getHouseholdSizeConfirmed())
-                .hasFeedback(hasFeedback)
-                .latestFeedback(latestFeedback)
-                .feedbackNote(feedbackNote)
-                .feedbackCreatedAt(feedbackCreatedAt)
+                .hasFeedback(false)
+                .latestFeedback(null)
                 .recentHistory(historyItems)
+                .isFirstMonth(isFirstMonth)
+                .baselineSource(isFirstMonth ? "HOUSEHOLD_PROFILE_CALIBRATION" : "QUANTILE_REGRESSION_ML")
                 .build();
     }
 
@@ -357,6 +390,7 @@ public class LeakReportService {
                         .unitsConsumed(units)
                         .expectedMin(expMin)
                         .expectedMax(expMax)
+                        .expectedUsage(Math.round(((expMin + expMax) / 2.0) * 10.0) / 10.0)
                         .anomalyScore(score)
                         .anomalyStatus(status)
                         .anomalyReason(reason)
@@ -365,8 +399,8 @@ public class LeakReportService {
                         .incidentId(usage.getIncidentId())
                         .incidentStatus(incidentStatus)
                         .estimatedExtraCost(extraCost)
-                        .hasFeedback(hasFb)
-                        .latestFeedback(latestFb)
+                        .hasFeedback(false)
+                        .latestFeedback(null)
                         .build());
             } else {
                 // Flat has not been billed / no meter reading in this cycle

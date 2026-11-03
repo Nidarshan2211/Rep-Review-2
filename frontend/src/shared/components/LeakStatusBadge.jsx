@@ -1,35 +1,13 @@
 /**
- * Helper to display human-friendly labels for leak feedback categories
- */
-export function formatFeedbackLabel(feedback) {
-  if (!feedback) return '';
-  const map = {
-    'FALSE_ALARM': 'False Alarm',
-    'REAL_LEAK_CONFIRMED': 'Confirmed Leak',
-    'CONFIRMED_LEAK': 'Confirmed Leak',
-    'PLUMBING_WORK': 'Plumbing Work',
-    'GUESTS_VISITING': 'Guests Visiting',
-    'TEMPORARY_HIGH_USAGE': 'Temporary High Usage',
-    'FIXED_NOW': 'Leak Fixed',
-    'METER_FAULT': 'Meter Fault',
-    'COMMON_AREA_LEAK': 'Common Area Leak',
-    'OTHER': 'Other'
-  };
-  return map[feedback.toUpperCase()] || feedback.replace(/_/g, ' ');
-}
-
-/**
  * LeakStatusBadge
- * Renders a standardized, color-coded badge for leak anomaly status.
- * Statuses: NORMAL, POTENTIAL_LEAK, INSUFFICIENT_HISTORY
+ * Renders a standardized, color-coded badge for ML leak anomaly status.
+ * Statuses: NORMAL, POTENTIAL_LEAK, INSUFFICIENT_HISTORY, LOW_USAGE_SUSPECT
  */
 export default function LeakStatusBadge({
   status,
   confidence,
   size = 'md',
-  className = '',
-  hasFeedback = false,
-  feedbackLabel = ''
+  className = ''
 }) {
   const normStatus = (status || 'INSUFFICIENT_HISTORY').toUpperCase();
 
@@ -40,15 +18,7 @@ export default function LeakStatusBadge({
     pulse: false
   };
 
-  if (hasFeedback) {
-    const formatted = feedbackLabel ? formatFeedbackLabel(feedbackLabel) : 'Feedback Logged';
-    config = {
-      label: `Feedback: ${formatted}`,
-      icon: 'bi-check-circle-fill',
-      bgClass: 'bg-success-subtle text-success border border-success-subtle',
-      pulse: false
-    };
-  } else if (normStatus === 'NORMAL') {
+  if (normStatus === 'NORMAL') {
     config = {
       label: 'Normal Usage',
       icon: 'bi-check-circle-fill',
@@ -61,6 +31,13 @@ export default function LeakStatusBadge({
       icon: 'bi-exclamation-triangle-fill',
       bgClass: 'bg-danger-subtle text-danger border border-danger-subtle',
       pulse: true
+    };
+  } else if (normStatus === 'LOW_USAGE_SUSPECT') {
+    config = {
+      label: 'Low Usage Suspect',
+      icon: 'bi-dash-circle-fill',
+      bgClass: 'bg-warning-subtle text-warning border border-warning-subtle',
+      pulse: false
     };
   }
 
@@ -98,4 +75,9 @@ export default function LeakStatusBadge({
       )}
     </span>
   );
+}
+
+// Deprecated no-op helper for backward compatibility
+export function formatFeedbackLabel(feedback) {
+  return '';
 }

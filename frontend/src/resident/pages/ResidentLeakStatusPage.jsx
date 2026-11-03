@@ -1,12 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import API from '../../shared/services/api';
 import LoadingSpinner from '../../shared/components/LoadingSpinner';
-import LeakStatusBadge, { formatFeedbackLabel } from '../../shared/components/LeakStatusBadge';
+import LeakStatusBadge from '../../shared/components/LeakStatusBadge';
 import RiskScoreBar from '../../shared/components/RiskScoreBar';
 import UsageRangeChart from '../../shared/components/UsageRangeChart';
 import HouseholdSizeModal from '../../shared/components/HouseholdSizeModal';
 import AwayPeriodModal from '../../shared/components/AwayPeriodModal';
-import LeakFeedbackModal from '../../shared/components/LeakFeedbackModal';
 
 /**
  * ResidentLeakStatusPage
@@ -23,7 +22,6 @@ export default function ResidentLeakStatusPage() {
   // Modals
   const [showHhModal, setShowHhModal] = useState(false);
   const [showAwayModal, setShowAwayModal] = useState(false);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -62,12 +60,11 @@ export default function ResidentLeakStatusPage() {
   }
 
   const status = data?.anomalyStatus || 'INSUFFICIENT_HISTORY';
-  const hasFeedback = Boolean(data?.hasFeedback);
-  const latestFeedback = data?.latestFeedback;
-  const isLeak = (status === 'POTENTIAL_LEAK') && !hasFeedback;
+  const isLeak = (status === 'POTENTIAL_LEAK');
   const units = data?.unitsConsumed != null ? Number(data.unitsConsumed).toFixed(2) : '0.00';
   const expMin = data?.expectedMin != null ? Number(data.expectedMin).toFixed(2) : '0.00';
   const expMax = data?.expectedMax != null ? Number(data.expectedMax).toFixed(2) : '0.00';
+  const expMedian = data?.expectedUsage != null ? Number(data.expectedUsage).toFixed(2) : ((Number(expMin) + Number(expMax)) / 2).toFixed(2);
   const rawRisk = data?.anomalyScore;
   const riskScore = rawRisk != null
     ? (rawRisk > 0 && rawRisk <= 1.0 ? Math.round(rawRisk * 100) : Math.round(rawRisk))
@@ -76,6 +73,14 @@ export default function ResidentLeakStatusPage() {
   const extraCost = data?.estimatedExtraCost != null ? Number(data.estimatedExtraCost).toFixed(2) : null;
   const aptLabel = data?.apartmentNumber ? `Flat ${data.apartmentNumber}` : 'Your Flat';
   const isHhConfirmed = Boolean(data?.householdSizeConfirmed);
+
+  // Determine if resident is in their first billing cycle
+  const isFirstMonth = Boolean(
+    data?.isFirstMonth ||
+    data?.baselineSource === 'HOUSEHOLD_PROFILE_CALIBRATION' ||
+    (data?.recentHistory && data.recentHistory.length <= 1) ||
+    status === 'INSUFFICIENT_HISTORY'
+  );
 
   // Format historical data for UsageRangeChart - sorted chronologically (past -> present)
   const defaultHh = data?.householdSize || 2;
@@ -89,10 +94,11 @@ export default function ResidentLeakStatusPage() {
     actual: h.unitsConsumed,
     expectedMin: h.expectedMin != null ? h.expectedMin : fallbackMin,
     expectedMax: h.expectedMax != null ? h.expectedMax : fallbackMax,
+    expectedMedian: h.expectedUsage != null ? h.expectedUsage : (( (h.expectedMin != null ? h.expectedMin : fallbackMin) + (h.expectedMax != null ? h.expectedMax : fallbackMax) ) / 2),
+    pattern: h.anomalyPattern || 'NORMAL',
     status: h.anomalyStatus,
     riskScore: h.anomalyScore,
-    hasFeedback: h.hasFeedback,
-    latestFeedback: h.latestFeedback
+    isFirstMonth: isFirstMonth
   })).slice().sort((a, b) => (a.year - b.year) || (a.month - b.month));
 
   return (
@@ -110,15 +116,7 @@ export default function ResidentLeakStatusPage() {
         onClose={() => setShowAwayModal(false)}
         onUpdated={fetchStatus}
       />
-      <LeakFeedbackModal
-        show={showFeedbackModal}
-        onClose={() => setShowFeedbackModal(false)}
-        onSubmitted={fetchStatus}
-        usageId={data?.usageId}
-        incidentId={data?.incidentId}
-        apartmentLabel={aptLabel}
-        isOwner={false}
-      />
+      
 
       {/* Header Banner */}
       <div className="card glass-card border-0 shadow-sm p-4 mb-4 bg-white rounded-4">
@@ -199,8 +197,6 @@ export default function ResidentLeakStatusPage() {
       <div className={`card border-0 shadow-sm p-4 mb-4 rounded-4 ${
         isLeak
           ? 'bg-danger-subtle border-start border-danger border-5'
-          : hasFeedback
-          ? 'bg-success-subtle border-start border-success border-5'
           : 'bg-white'
       }`}>
         <div className="row align-items-center g-4">
@@ -209,8 +205,6 @@ export default function ResidentLeakStatusPage() {
               <LeakStatusBadge
                 status={status}
                 confidence={confidence}
-                hasFeedback={hasFeedback}
-                feedbackLabel={latestFeedback}
                 size="lg"
               />
               {data?.month && data?.year && (
@@ -220,40 +214,14 @@ export default function ResidentLeakStatusPage() {
               )}
             </div>
 
-            {hasFeedback ? (
-              <div>
-                <h4 className="fw-bold text-success mb-2">
-                  <i className="bi bi-shield-check me-2"></i>
-                  Leak Alert Addressed & Feedback Logged
-                </h4>
-                <p className="text-dark fs-6 mb-2">
-                  You submitted feedback for this cycle: <strong>{formatFeedbackLabel(latestFeedback)}</strong>
-                  {data?.feedbackNote ? ` — "${data.feedbackNote}"` : ''}.
-                  This cycle is no longer flagged as an active leak risk. Our machine learning engine has absorbed your input to prevent future false alarms.
-                </p>
-                <div className="d-flex align-items-center gap-2 flex-wrap pt-2">
-                  <button
-                    className="btn btn-outline-success btn-sm rounded-pill px-3 fw-semibold"
-                    onClick={() => setShowFeedbackModal(true)}
-                  >
-                    <i className="bi bi-pencil-square me-1"></i> Update Feedback
-                  </button>
-                  <button
-                    className="btn btn-outline-secondary btn-sm rounded-pill px-3 fw-semibold"
-                    onClick={() => setShowAwayModal(true)}
-                  >
-                    <i className="bi bi-airplane me-1"></i> Log Away Period
-                  </button>
-                </div>
-              </div>
-            ) : isLeak ? (
+            {isLeak ? (
               <div>
                 <h4 className="fw-bold text-danger mb-2">
                   <i className="bi bi-droplet-half me-2 animate-pulse"></i>
                   Potential Water Leak Detected in {aptLabel}
                 </h4>
                 <p className="text-dark fs-6 mb-2">
-                  {data?.anomalyReason || 'Actual water consumption is significantly higher than machine-learned household expectations.'}
+                  {data?.anomalyReason || 'Actual water consumption significantly exceeds the predicted quantile upper threshold.'}
                 </p>
                 {data?.anomalyPattern && (
                   <div className="mb-3">
@@ -266,12 +234,6 @@ export default function ResidentLeakStatusPage() {
                   </div>
                 )}
                 <div className="d-flex align-items-center gap-2 flex-wrap pt-2">
-                  <button
-                    className="btn btn-danger btn-sm rounded-pill px-3 fw-bold shadow-xs"
-                    onClick={() => setShowFeedbackModal(true)}
-                  >
-                    <i className="bi bi-chat-dots me-1"></i> Report Feedback / False Alarm
-                  </button>
                   <button
                     className="btn btn-outline-danger btn-sm rounded-pill px-3 fw-semibold"
                     onClick={() => setShowAwayModal(true)}
@@ -286,40 +248,35 @@ export default function ResidentLeakStatusPage() {
                   <i className="bi bi-shield-check me-2"></i> Normal Water Consumption
                 </h4>
                 <p className="text-muted fs-6 mb-0">
-                  {data?.anomalyReason || 'Your water consumption is safely within the predicted normal bounds for your household.'}
+                  {data?.anomalyReason || 'Your water consumption is safely within the predicted quantile boundaries for your household.'}
                 </p>
               </div>
             ) : (
               <div>
-                <h4 className="fw-bold text-secondary mb-2">
-                  <i className="bi bi-hourglass-split me-2"></i> Baseline Profile Building
-                </h4>
-                <p className="text-muted fs-6 mb-0">
-                  {data?.anomalyReason || 'We are building your consumption profile. At least two consecutive billing cycles are needed to generate tight confidence intervals.'}
+                <div className="d-flex align-items-center gap-2 mb-2">
+                  <h4 className="fw-bold text-primary mb-0">
+                    <i className="bi bi-hourglass-split me-2"></i> Baseline Profile Building
+                  </h4>
+                  <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-0.5 fs-8">
+                    First Billing Cycle
+                  </span>
+                </div>
+                <p className="text-dark fs-6 mb-2">
+                  {data?.anomalyReason || `We are establishing your consumption profile. Expected normal range (${expMin} – ${expMax} kL) is calibrated from your ${data?.householdSize || 3}-person household profile (100–250 L/person/day).`}
                 </p>
+                <div className="alert alert-info border-0 rounded-3 py-2 px-3 small d-flex align-items-center gap-2 mb-0">
+                  <i className="bi bi-info-circle-fill text-info fs-6"></i>
+                  <span>
+                    <strong>How is Month 1 range calculated?</strong> Without prior billing history, standard per-capita baseline rules apply: <strong>{data?.householdSize || 3} members × 100–250 L/day × 30 days = {expMin} – {expMax} kL</strong>. LightGBM 3-quantile regression models activate automatically once consecutive cycle readings exist.
+                  </span>
+                </div>
               </div>
             )}
           </div>
 
           <div className="col-lg-4 border-start-lg ps-lg-4">
             <div className="p-3 bg-light rounded-3">
-              {hasFeedback ? (
-                <div>
-                  <div className="d-flex align-items-center justify-content-between mb-2">
-                    <span className="fs-8 text-muted text-uppercase fw-semibold">Investigation Status</span>
-                    <span className="badge bg-success text-white">ACKNOWLEDGED</span>
-                  </div>
-                  <div className="fs-6 fw-bold text-dark mb-1">
-                    <i className="bi bi-check2-circle text-success me-1.5"></i>
-                    {formatFeedbackLabel(latestFeedback)}
-                  </div>
-                  <div className="fs-8 text-muted">
-                    Resident feedback recorded. Active alert redness cleared.
-                  </div>
-                </div>
-              ) : (
-                <RiskScoreBar score={riskScore} showLabel={true} />
-              )}
+              <RiskScoreBar score={riskScore} showLabel={true} />
             </div>
           </div>
         </div>
@@ -345,11 +302,13 @@ export default function ResidentLeakStatusPage() {
           </div>
         </div>
 
-        {/* Expected Range Card */}
+        {/* Expected Range Card - Quantile Regression of Three Values */}
         <div className="col-md-4">
           <div className="card glass-card border-0 shadow-sm p-4 bg-white rounded-4 h-100">
             <div className="d-flex align-items-center justify-content-between mb-2">
-              <span className="text-uppercase text-muted fs-8 fw-semibold">Predicted Normal Band</span>
+              <span className="text-uppercase text-muted fs-8 fw-semibold">
+                {isFirstMonth ? 'Initial Baseline Band (Month 1)' : 'Quantile Regression Envelope'}
+              </span>
               <div className="p-2 rounded-circle bg-info-subtle text-info">
                 <i className="bi bi-graph-up fs-5"></i>
               </div>
@@ -357,8 +316,13 @@ export default function ResidentLeakStatusPage() {
             <h2 className="fw-bold mb-1 text-dark">
               {expMin} – {expMax} <span className="fs-5 text-muted fw-normal">kL</span>
             </h2>
+            <div className="fs-7 text-primary fw-semibold mb-1">
+              Expected Normal (q50): {expMedian} kL
+            </div>
             <div className="fs-8 text-muted">
-              Learned from past cycles, peer units, and household size.
+              {isFirstMonth
+                ? `Calibrated from household profile (${data?.householdSize || 3} occupants @ 100/150/250 L/day). Quantile ML models begin in Cycle 2.`
+                : `Predicted by LightGBM 3-quantile regression (q10: ${expMin} kL, q50: ${expMedian} kL, q95: ${expMax} kL).`}
             </div>
           </div>
         </div>
@@ -405,21 +369,14 @@ export default function ResidentLeakStatusPage() {
           <div>
             <h5 className="fw-bold text-dark mb-1">
               <i className="bi bi-water text-primary me-2"></i>
-              Consumption vs. Learned Expectation Band
+              {isFirstMonth ? 'Consumption vs. Calibrated Baseline Band (Month 1)' : 'Consumption vs. Quantile Regression Expectation (q10, q50, q95)'}
             </h5>
             <p className="text-muted small mb-0">
-              Track your actual water usage against the algorithmic range boundaries over consecutive billing cycles.
+              {isFirstMonth
+                ? 'Comparing Month 1 water usage against the household demographic baseline (100–250 L/person/day municipal benchmark).'
+                : 'Water consumption tracked against 3 quantile boundaries: Lower Limit (q10), Expected Normal (q50), and Upper Limit (q95).'}
             </p>
           </div>
-          {data?.usageId && (
-            <button
-              className="btn btn-outline-secondary btn-sm rounded-pill px-3"
-              onClick={() => setShowFeedbackModal(true)}
-            >
-              <i className={`bi ${hasFeedback ? 'bi-check2-circle text-success' : 'bi-chat-square-text'} me-1`}></i>
-              {hasFeedback ? 'Update Feedback' : 'Provide Cycle Feedback'}
-            </button>
-          )}
         </div>
         <UsageRangeChart data={chartData} height={340} />
       </div>

@@ -4,7 +4,6 @@ import LoadingSpinner from '../../shared/components/LoadingSpinner';
 import LeakStatusBadge from '../../shared/components/LeakStatusBadge';
 import RiskScoreBar from '../../shared/components/RiskScoreBar';
 import HouseholdSizeModal from '../../shared/components/HouseholdSizeModal';
-import LeakFeedbackModal from '../../shared/components/LeakFeedbackModal';
 
 /**
  * OwnerLeakMonitoringPage
@@ -31,7 +30,6 @@ export default function OwnerLeakMonitoringPage() {
   const [riskFilter, setRiskFilter] = useState('ALL'); // 'ALL' | 'HIGH' | 'MED' | 'LEAK_ONLY' | 'NORMAL'
 
   // Modal states
-  const [selectedItemForFeedback, setSelectedItemForFeedback] = useState(null);
   const [selectedItemForHhEdit, setSelectedItemForHhEdit] = useState(null);
 
   // 1. Fetch buildings list on mount
@@ -177,17 +175,7 @@ export default function OwnerLeakMonitoringPage() {
   return (
     <div className="container-fluid py-4">
       {/* Modals */}
-      {selectedItemForFeedback && (
-        <LeakFeedbackModal
-          show={Boolean(selectedItemForFeedback)}
-          onClose={() => setSelectedItemForFeedback(null)}
-          onSubmitted={() => fetchMonitoringData(selectedBuildingId)}
-          usageId={selectedItemForFeedback.usageId}
-          incidentId={selectedItemForFeedback.incidentId}
-          apartmentLabel={`Flat ${selectedItemForFeedback.apartmentNumber}`}
-          isOwner={true}
-        />
-      )}
+      
 
       {selectedItemForHhEdit && (
         <HouseholdSizeModal
@@ -445,7 +433,8 @@ export default function OwnerLeakMonitoringPage() {
 
                           {/* Expected Band */}
                           <td>
-                            <span className="text-muted">{min} – {max} kL</span>
+                            <strong className="text-dark d-block">{min} – {max} kL</strong>
+                            <small className="text-muted">Median (q50): {item.expectedUsage != null ? Number(item.expectedUsage).toFixed(1) : ((Number(min) + Number(max))/2).toFixed(1)} kL</small>
                           </td>
 
                           {/* Risk */}
@@ -499,14 +488,7 @@ export default function OwnerLeakMonitoringPage() {
                                   Dismiss
                                 </button>
                               )}
-                              <button
-                                type="button"
-                                className="btn btn-outline-primary btn-sm py-0.5 px-2 fs-8"
-                                title="Submit Ground Truth Feedback"
-                                onClick={() => setSelectedItemForFeedback(item)}
-                              >
-                                Feedback
-                              </button>
+
                               <button
                                 type="button"
                                 className="btn btn-light btn-sm py-0.5 px-2 fs-8"
